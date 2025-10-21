@@ -26,9 +26,9 @@ import argparse
 import json
 import math
 import statistics
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 import numpy as np
 from aeon.datasets import load_classification
@@ -378,6 +378,102 @@ def _write_reports(output_path: Path, reports: Sequence[DatasetReport]) -> Path:
     return output_path
 
 
+def _filter_dataclass_kwargs(
+    data: Mapping[str, Any], cls: type
+) -> Dict[str, Any]:
+    """Return a dictionary restricted to the fields accepted by ``cls``."""
+
+    allowed = {field.name for field in fields(cls)}
+    return {key: value for key, value in data.items() if key in allowed}
+
+
+def _load_existing_reports(output_path: Path) -> Tuple[List[DatasetReport], Set[str]]:
+    """Load reports from an existing JSON file if it is available.
+
+    Returns both the parsed reports and the set of dataset names that were
+    already processed. Any issue while reading or parsing the file results in an
+    empty collection so that the caller can safely resume from scratch.
+    """
+
+    if not output_path.exists():
+        return [], set()
+
+    try:
+        raw_content = output_path.read_text()
+    except OSError as exc:  # pragma: no cover - runtime safety
+        print(f"Warning: failed to read existing report '{output_path}': {exc}")
+        return [], set()
+
+    raw_content = raw_content.strip()
+    if not raw_content:
+        return [], set()
+
+    try:
+        payload = json.loads(raw_content)
+    except json.JSONDecodeError as exc:  # pragma: no cover - runtime safety
+        print(
+            f"Warning: could not parse JSON report '{output_path}'; "
+            "ignoring previous results."
+        )
+        print(f"  Parsing error: {exc}")
+        return [], set()
+
+    if not isinstance(payload, list):
+        print(
+            f"Warning: unexpected JSON structure in '{output_path}'; "
+            "ignoring previous results."
+        )
+        return [], set()
+
+    existing_reports: List[DatasetReport] = []
+    completed_datasets: Set[str] = set()
+
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+
+        dataset_name = item.get("dataset")
+        if not isinstance(dataset_name, str) or not dataset_name:
+            continue
+
+        completed_datasets.add(dataset_name)
+
+        metadata_payload = item.get("metadata")
+        metadata_dict = (
+            _filter_dataclass_kwargs(dict(metadata_payload), DatasetMetadata)
+            if isinstance(metadata_payload, dict)
+            else {}
+        )
+        metadata_dict.setdefault("dataset", dataset_name)
+        metadata = DatasetMetadata(**metadata_dict)
+
+        forest_payload = item.get("forest_statistics")
+        forest_statistics = None
+        if isinstance(forest_payload, dict):
+            forest_kwargs = _filter_dataclass_kwargs(
+                dict(forest_payload), ForestStatistics
+            )
+            if forest_kwargs:
+                try:
+                    forest_statistics = ForestStatistics(**forest_kwargs)
+                except TypeError:
+                    forest_statistics = None
+
+        report = DatasetReport(
+            dataset=dataset_name,
+            status=str(item.get("status") or "unknown"),
+            metadata=metadata,
+            best_params=item.get("best_params"),
+            validation_score=item.get("validation_score"),
+            test_score=item.get("test_score"),
+            forest_statistics=forest_statistics,
+            error=item.get("error"),
+        )
+        existing_reports.append(report)
+
+    return existing_reports, completed_datasets
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
 
@@ -387,11 +483,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.output:
         output_path = _prepare_output_path(args.output)
 
-    reports: List[DatasetReport] = []
+    existing_reports: List[DatasetReport] = []
+    completed_datasets: Set[str] = set()
+    if output_path is not None:
+        existing_reports, completed_datasets = _load_existing_reports(output_path)
+
+    reports: List[DatasetReport] = list(existing_reports)
     interrupted = False
+    new_reports_generated = False
 
     try:
         for dataset in datasets:
+            if dataset in completed_datasets:
+                print(f"Skipping dataset already present in report: {dataset}")
+                continue
+
             print(f"Processing dataset: {dataset}")
             try:
                 metadata = _gather_metadata(dataset)
@@ -404,6 +510,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         error=f"Failed to load dataset metadata: {exc}",
                     )
                 )
+                completed_datasets.add(dataset)
+                new_reports_generated = True
+                if output_path is not None:
+                    _write_reports(output_path, reports)
                 continue
 
             if metadata.first_class:
@@ -411,6 +521,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
             report = generate_report(dataset, metadata)
             reports.append(report)
+            completed_datasets.add(dataset)
+            new_reports_generated = True
 
             if output_path is not None:
                 _write_reports(output_path, reports)
@@ -423,9 +535,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     else:
         print("\nNo reports were generated.")
 
-    if output_path is not None:
+    if output_path is not None and (new_reports_generated or not output_path.exists()):
         _write_reports(output_path, reports)
         print(f"\nReport written to {output_path}")
+    elif output_path is not None:
+        print(f"\nReport already up-to-date at {output_path}")
 
     return 130 if interrupted else 0
 
