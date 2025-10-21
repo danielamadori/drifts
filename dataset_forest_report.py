@@ -370,43 +370,58 @@ def _prepare_output_path(path: Path) -> Path:
     return path
 
 
+def _write_reports(output: Path, reports: Sequence[DatasetReport]) -> Path:
+    """Persist the collected reports to disk."""
+
+    payload = [report.to_json_ready() for report in reports]
+    output_path = _prepare_output_path(output)
+    output_path.write_text(json.dumps(payload, indent=2) + "\n")
+    return output_path
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
 
     datasets = sorted(set(AVAILABLE_DATASETS))
 
     reports: List[DatasetReport] = []
+    interrupted = False
 
-    for dataset in datasets:
-        print(f"Processing dataset: {dataset}")
-        try:
-            metadata = _gather_metadata(dataset)
-        except Exception as exc:  # pragma: no cover - runtime safety
-            reports.append(
-                DatasetReport(
-                    dataset=dataset,
-                    status="failed",
-                    metadata=DatasetMetadata(dataset=dataset),
-                    error=f"Failed to load dataset metadata: {exc}",
+    try:
+        for dataset in datasets:
+            print(f"Processing dataset: {dataset}")
+            try:
+                metadata = _gather_metadata(dataset)
+            except Exception as exc:  # pragma: no cover - runtime safety
+                reports.append(
+                    DatasetReport(
+                        dataset=dataset,
+                        status="failed",
+                        metadata=DatasetMetadata(dataset=dataset),
+                        error=f"Failed to load dataset metadata: {exc}",
+                    )
                 )
-            )
-            continue
+                continue
 
-        if metadata.first_class:
-            print(f"  Target class: {metadata.first_class}")
+            if metadata.first_class:
+                print(f"  Target class: {metadata.first_class}")
 
-        report = generate_report(dataset, metadata)
-        reports.append(report)
+            report = generate_report(dataset, metadata)
+            reports.append(report)
+    except KeyboardInterrupt:  # pragma: no cover - runtime safety
+        interrupted = True
+        print("\nInterrupted by user. Writing partial results...")
 
-    print("\n" + _format_table(reports))
+    if reports:
+        print("\n" + _format_table(reports))
+    else:
+        print("\nNo reports were generated.")
 
     if args.output:
-        payload = [report.to_json_ready() for report in reports]
-        output_path = _prepare_output_path(args.output)
-        output_path.write_text(json.dumps(payload, indent=2))
+        output_path = _write_reports(args.output, reports)
         print(f"\nReport written to {output_path}")
 
-    return 0
+    return 130 if interrupted else 0
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
