@@ -370,11 +370,10 @@ def _prepare_output_path(path: Path) -> Path:
     return path
 
 
-def _write_reports(output: Path, reports: Sequence[DatasetReport]) -> Path:
+def _write_reports(output_path: Path, reports: Sequence[DatasetReport]) -> Path:
     """Persist the collected reports to disk."""
 
     payload = [report.to_json_ready() for report in reports]
-    output_path = _prepare_output_path(output)
     output_path.write_text(json.dumps(payload, indent=2) + "\n")
     return output_path
 
@@ -383,6 +382,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
 
     datasets = sorted(set(AVAILABLE_DATASETS))
+
+    output_path: Optional[Path] = None
+    if args.output:
+        output_path = _prepare_output_path(args.output)
 
     reports: List[DatasetReport] = []
     interrupted = False
@@ -408,6 +411,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
             report = generate_report(dataset, metadata)
             reports.append(report)
+
+            if output_path is not None:
+                _write_reports(output_path, reports)
     except KeyboardInterrupt:  # pragma: no cover - runtime safety
         interrupted = True
         print("\nInterrupted by user. Writing partial results...")
@@ -417,8 +423,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     else:
         print("\nNo reports were generated.")
 
-    if args.output:
-        output_path = _write_reports(args.output, reports)
+    if output_path is not None:
+        _write_reports(output_path, reports)
         print(f"\nReport written to {output_path}")
 
     return 130 if interrupted else 0
