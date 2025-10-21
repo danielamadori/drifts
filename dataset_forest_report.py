@@ -1,30 +1,23 @@
 #!/usr/bin/env python3
-"""Generate a dataset summary and Random Forest optimization report.
+"""Generate an alphabetical summary for every available univariate dataset.
 
-This script iterates over the Aeon univariate datasets listed in
-``init_aeon_univariate.AVAILABLE_DATASETS`` and, for each dataset,
-performs the following steps:
+For each dataset listed in ``init_aeon_univariate.AVAILABLE_DATASETS`` the
+script gathers basic metadata (dataset size, number of channels, length,
+class information) and, whenever the series length is consistent, mimics the
+behaviour of running::
 
-1. Load train/test splits and gather metadata such as series length,
-   number of channels, and class distribution.
-2. Skip datasets that contain time series of inconsistent length. Their
-   reported ``series_length`` is set to ``0``.
-3. Run Bayesian optimization (using scikit-optimize) to tune a Random
-   Forest classifier when the dataset is compatible.
-4. Convert the best Random Forest into the internal ``Forest``
-   representation and record structural statistics (e.g., number of
-   trees, average/max depth, average number of nodes).
-5. Collect all results in a JSON-serialisable structure that can be
-   printed or written to disk.
+    python ./init_aeon_univariate.py <dataset> --class <first_class> --optimize
 
-Example usage::
+The optimisation stage relies exclusively on the ``--optimize`` workflow of
+``init_aeon_univariate``: the first class discovered in the dataset is used as
+target label and Bayesian optimisation is executed to obtain a tuned Random
+Forest model. Structural statistics (number of trees, depth, nodes, leaves)
+from the optimised forest are recorded so that the size of the produced forests
+can be compared across datasets.
 
-    python dataset_forest_report.py \
-        --n-iter 20 \
-        --output forest_report.json
-
-The script prints a compact table to stdout and (optionally) writes the
-full JSON report to ``--output``.
+Datasets containing time series with inconsistent lengths are reported with a
+``series_length`` of ``0`` and the optimisation stage is skipped for them.
+Results are printed as a table and can optionally be written to disk as JSON.
 """
 
 from __future__ import annotations
@@ -33,7 +26,6 @@ import argparse
 import json
 import math
 import statistics
-import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -70,6 +62,7 @@ class DatasetMetadata:
     n_classes: int = 0
     classes: Sequence[Any] = ()
     length_consistent: bool = False
+    first_class: Optional[str] = None
 
 
 @dataclass
@@ -168,6 +161,8 @@ def _gather_metadata(dataset: str) -> DatasetMetadata:
     consistent = train_consistent and test_consistent and train_length == test_length
 
     classes = np.unique(np.concatenate([y_train, y_test])).astype(str)
+    classes_sorted = np.sort(classes)
+    first_class = str(classes_sorted[0]) if classes_sorted.size else None
 
     if X_train.dtype == object and consistent:
         sample_shape = np.asarray(X_train[0]).shape
@@ -183,9 +178,10 @@ def _gather_metadata(dataset: str) -> DatasetMetadata:
         test_size=int(X_test.shape[0]),
         n_channels=n_channels,
         series_length=train_length if consistent else 0,
-        n_classes=int(len(classes)),
-        classes=classes.tolist(),
+        n_classes=int(len(classes_sorted)),
+        classes=classes_sorted.tolist(),
         length_consistent=bool(consistent),
+        first_class=first_class,
     )
     return metadata
 
@@ -207,25 +203,24 @@ def _summarise_forest(estimators: Sequence[Any]) -> ForestStatistics:
     )
 
 
+DEFAULT_OPTIMIZATION_ITERATIONS = 25
+DEFAULT_OPTIMIZATION_CV = 5
+DEFAULT_OPTIMIZATION_N_JOBS = -1
+DEFAULT_RANDOM_STATE = 42
+INCLUDE_BOOTSTRAP_IN_SEARCH = True
+
+
 def generate_report(
     dataset: str,
-    n_iter: int,
-    cv: int,
-    n_jobs: int,
-    random_state: int,
-    include_bootstrap: bool,
+    metadata: DatasetMetadata,
+    *,
+    random_state: int = DEFAULT_RANDOM_STATE,
+    n_iter: int = DEFAULT_OPTIMIZATION_ITERATIONS,
+    cv: int = DEFAULT_OPTIMIZATION_CV,
+    n_jobs: int = DEFAULT_OPTIMIZATION_N_JOBS,
+    include_bootstrap: bool = INCLUDE_BOOTSTRAP_IN_SEARCH,
 ) -> DatasetReport:
     """Generate the optimisation report for a single dataset."""
-
-    try:
-        metadata = _gather_metadata(dataset)
-    except Exception as exc:  # pragma: no cover - runtime safety
-        return DatasetReport(
-            dataset=dataset,
-            status="failed",
-            metadata=DatasetMetadata(dataset=dataset),
-            error=f"Failed to load dataset: {exc}",
-        )
 
     if not metadata.length_consistent:
         return DatasetReport(
@@ -312,6 +307,7 @@ def _format_table(reports: Iterable[DatasetReport]) -> str:
         "Series length",
         "Classes",
         "CV score",
+        "First class",
         "Trees",
         "Avg depth",
     ]
@@ -329,6 +325,7 @@ def _format_table(reports: Iterable[DatasetReport]) -> str:
                 str(meta.series_length),
                 str(meta.n_classes),
                 f"{report.validation_score:.3f}" if report.validation_score is not None else "-",
+                meta.first_class or "-",
                 f"{stats.n_estimators}" if stats else "-",
                 f"{stats.avg_depth:.2f}" if stats else "-",
             ]
@@ -351,41 +348,6 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--datasets",
-        nargs="*",
-        default=None,
-        help="Subset of dataset names to process. Defaults to all available datasets.",
-    )
-    parser.add_argument(
-        "--n-iter",
-        type=int,
-        default=25,
-        help="Number of Bayesian optimisation iterations per dataset (default: 25).",
-    )
-    parser.add_argument(
-        "--cv",
-        type=int,
-        default=5,
-        help="Number of cross-validation folds (default: 5).",
-    )
-    parser.add_argument(
-        "--n-jobs",
-        type=int,
-        default=-1,
-        help="Number of parallel jobs for optimisation (default: -1 for all cores).",
-    )
-    parser.add_argument(
-        "--random-state",
-        type=int,
-        default=42,
-        help="Random seed for reproducibility (default: 42).",
-    )
-    parser.add_argument(
-        "--disable-bootstrap",
-        action="store_true",
-        help="Exclude bootstrap-related parameters from the optimisation search space.",
-    )
-    parser.add_argument(
         "--output",
         type=Path,
         help="Path to write the JSON report. If omitted, the report is not written to disk.",
@@ -396,23 +358,29 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
 
-    if args.datasets:
-        datasets = args.datasets
-    else:
-        datasets = AVAILABLE_DATASETS
+    datasets = sorted(set(AVAILABLE_DATASETS))
 
     reports: List[DatasetReport] = []
 
     for dataset in datasets:
         print(f"Processing dataset: {dataset}")
-        report = generate_report(
-            dataset=dataset,
-            n_iter=args.n_iter,
-            cv=args.cv,
-            n_jobs=args.n_jobs,
-            random_state=args.random_state,
-            include_bootstrap=not args.disable_bootstrap,
-        )
+        try:
+            metadata = _gather_metadata(dataset)
+        except Exception as exc:  # pragma: no cover - runtime safety
+            reports.append(
+                DatasetReport(
+                    dataset=dataset,
+                    status="failed",
+                    metadata=DatasetMetadata(dataset=dataset),
+                    error=f"Failed to load dataset metadata: {exc}",
+                )
+            )
+            continue
+
+        if metadata.first_class:
+            print(f"  Target class: {metadata.first_class}")
+
+        report = generate_report(dataset, metadata)
         reports.append(report)
 
     print("\n" + _format_table(reports))
