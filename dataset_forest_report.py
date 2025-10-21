@@ -1,0 +1,429 @@
+#!/usr/bin/env python3
+"""Generate a dataset summary and Random Forest optimization report.
+
+This script iterates over the Aeon univariate datasets listed in
+``init_aeon_univariate.AVAILABLE_DATASETS`` and, for each dataset,
+performs the following steps:
+
+1. Load train/test splits and gather metadata such as series length,
+   number of channels, and class distribution.
+2. Skip datasets that contain time series of inconsistent length. Their
+   reported ``series_length`` is set to ``0``.
+3. Run Bayesian optimization (using scikit-optimize) to tune a Random
+   Forest classifier when the dataset is compatible.
+4. Convert the best Random Forest into the internal ``Forest``
+   representation and record structural statistics (e.g., number of
+   trees, average/max depth, average number of nodes).
+5. Collect all results in a JSON-serialisable structure that can be
+   printed or written to disk.
+
+Example usage::
+
+    python dataset_forest_report.py \
+        --n-iter 20 \
+        --output forest_report.json
+
+The script prints a compact table to stdout and (optionally) writes the
+full JSON report to ``--output``.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import statistics
+import sys
+from dataclasses import dataclass, asdict
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Sequence
+
+import numpy as np
+from aeon.datasets import load_classification
+
+from init_aeon_univariate import (
+    AVAILABLE_DATASETS,
+    convert_numpy_types,
+    get_rf_search_space,
+    optimize_rf_hyperparameters,
+)
+from skforest_to_forest import sklearn_forest_to_forest
+
+
+try:  # pragma: no cover - handled at runtime
+    import skopt  # type: ignore  # noqa: F401
+except ImportError as exc:  # pragma: no cover - handled at runtime
+    raise SystemExit(
+        "scikit-optimize is required. Install it with 'pip install scikit-optimize'."
+    ) from exc
+
+
+@dataclass
+class DatasetMetadata:
+    """Basic metadata gathered for each dataset."""
+
+    dataset: str
+    train_size: int = 0
+    test_size: int = 0
+    n_channels: int = 0
+    series_length: int = 0
+    n_classes: int = 0
+    classes: Sequence[Any] = ()
+    length_consistent: bool = False
+
+
+@dataclass
+class ForestStatistics:
+    """Structural information extracted from a fitted Random Forest."""
+
+    n_estimators: int
+    min_depth: int
+    max_depth: int
+    avg_depth: float
+    avg_nodes: float
+    avg_leaves: float
+
+
+@dataclass
+class DatasetReport:
+    """Full report for a dataset, including metadata and training stats."""
+
+    dataset: str
+    status: str
+    metadata: DatasetMetadata
+    best_params: Optional[Dict[str, Any]] = None
+    validation_score: Optional[float] = None
+    test_score: Optional[float] = None
+    forest_statistics: Optional[ForestStatistics] = None
+    error: Optional[str] = None
+
+    def to_json_ready(self) -> Dict[str, Any]:
+        """Convert the report into a JSON-safe dictionary."""
+
+        payload: Dict[str, Any] = {
+            "dataset": self.dataset,
+            "status": self.status,
+            "metadata": asdict(self.metadata),
+        }
+
+        if self.best_params is not None:
+            payload["best_params"] = convert_numpy_types(self.best_params)
+        if self.validation_score is not None:
+            payload["validation_score"] = self.validation_score
+        if self.test_score is not None:
+            payload["test_score"] = self.test_score
+        if self.forest_statistics is not None:
+            payload["forest_statistics"] = asdict(self.forest_statistics)
+        if self.error is not None:
+            payload["error"] = self.error
+
+        return payload
+
+
+def _flatten_dataset(X: np.ndarray) -> np.ndarray:
+    """Reshape time-series arrays into a 2D feature matrix."""
+
+    if X.dtype == object:
+        stacked = np.stack([np.asarray(sample).reshape(-1) for sample in X])
+        return stacked
+
+    if X.ndim == 3:
+        return X.reshape(X.shape[0], -1)
+
+    if X.ndim == 2:
+        return X
+
+    raise ValueError(
+        "Unsupported array shape for flattening: "
+        f"expected 2D or 3D data but received {X.shape}."
+    )
+
+
+def _extract_series_length(samples: np.ndarray) -> (int, bool):
+    """Determine whether the provided samples share the same length."""
+
+    if samples.dtype == object:
+        lengths = {np.asarray(item).shape[-1] for item in samples}
+        if len(lengths) == 1:
+            return next(iter(lengths)), True
+        return 0, False
+
+    if samples.ndim >= 3:
+        return int(samples.shape[-1]), True
+
+    if samples.ndim == 2:
+        return int(samples.shape[-1]), True
+
+    return 0, False
+
+
+def _gather_metadata(dataset: str) -> DatasetMetadata:
+    """Load the dataset and collect metadata about it."""
+
+    X_train, y_train = load_classification(dataset, split="train")
+    X_test, y_test = load_classification(dataset, split="test")
+
+    train_length, train_consistent = _extract_series_length(X_train)
+    test_length, test_consistent = _extract_series_length(X_test)
+    consistent = train_consistent and test_consistent and train_length == test_length
+
+    classes = np.unique(np.concatenate([y_train, y_test])).astype(str)
+
+    if X_train.dtype == object and consistent:
+        sample_shape = np.asarray(X_train[0]).shape
+        n_channels = sample_shape[0] if len(sample_shape) == 2 else 1
+    elif X_train.ndim >= 3:
+        n_channels = int(X_train.shape[1])
+    else:
+        n_channels = 1
+
+    metadata = DatasetMetadata(
+        dataset=dataset,
+        train_size=int(X_train.shape[0]),
+        test_size=int(X_test.shape[0]),
+        n_channels=n_channels,
+        series_length=train_length if consistent else 0,
+        n_classes=int(len(classes)),
+        classes=classes.tolist(),
+        length_consistent=bool(consistent),
+    )
+    return metadata
+
+
+def _summarise_forest(estimators: Sequence[Any]) -> ForestStatistics:
+    """Compute aggregated statistics from fitted sklearn estimators."""
+
+    depths = [int(estimator.tree_.max_depth) for estimator in estimators]
+    node_counts = [int(estimator.tree_.node_count) for estimator in estimators]
+    leaf_counts = [int(estimator.tree_.n_leaves) for estimator in estimators]
+
+    return ForestStatistics(
+        n_estimators=len(estimators),
+        min_depth=min(depths),
+        max_depth=max(depths),
+        avg_depth=float(statistics.fmean(depths)),
+        avg_nodes=float(statistics.fmean(node_counts)),
+        avg_leaves=float(statistics.fmean(leaf_counts)),
+    )
+
+
+def generate_report(
+    dataset: str,
+    n_iter: int,
+    cv: int,
+    n_jobs: int,
+    random_state: int,
+    include_bootstrap: bool,
+) -> DatasetReport:
+    """Generate the optimisation report for a single dataset."""
+
+    try:
+        metadata = _gather_metadata(dataset)
+    except Exception as exc:  # pragma: no cover - runtime safety
+        return DatasetReport(
+            dataset=dataset,
+            status="failed",
+            metadata=DatasetMetadata(dataset=dataset),
+            error=f"Failed to load dataset: {exc}",
+        )
+
+    if not metadata.length_consistent:
+        return DatasetReport(
+            dataset=dataset,
+            status="skipped_variable_length",
+            metadata=metadata,
+        )
+
+    try:
+        X_train, y_train = load_classification(dataset, split="train")
+        X_test, y_test = load_classification(dataset, split="test")
+    except Exception as exc:  # pragma: no cover - runtime safety
+        return DatasetReport(
+            dataset=dataset,
+            status="failed",
+            metadata=metadata,
+            error=f"Failed to reload dataset: {exc}",
+        )
+
+    X_train_2d = _flatten_dataset(X_train)
+    X_test_2d = _flatten_dataset(X_test)
+
+    feature_count = X_train_2d.shape[1]
+    padding_width = max(1, int(math.log10(feature_count)) + 1)
+    feature_names = [f"t_{i:0{padding_width}d}" for i in range(feature_count)]
+
+    search_space = get_rf_search_space(include_bootstrap=include_bootstrap)
+
+    try:
+        best_params, best_score, test_score, optimizer = optimize_rf_hyperparameters(
+            X_train_2d,
+            y_train,
+            search_space,
+            n_iter=n_iter,
+            cv=cv,
+            n_jobs=n_jobs,
+            random_state=random_state,
+            verbose=0,
+            X_test=X_test_2d,
+            y_test=y_test,
+            use_test_for_validation=False,
+        )
+    except Exception as exc:  # pragma: no cover - runtime safety
+        return DatasetReport(
+            dataset=dataset,
+            status="failed",
+            metadata=metadata,
+            error=f"Optimisation failed: {exc}",
+        )
+
+    if hasattr(optimizer, "best_estimator_"):
+        best_estimator = optimizer.best_estimator_
+    else:
+        best_estimator = optimizer
+
+    forest_stats = _summarise_forest(best_estimator.estimators_)
+
+    # Convert to internal forest for completeness (unused result but ensures compatibility)
+    sklearn_forest_to_forest(
+        best_estimator,
+        feature_names=feature_names,
+        class_names=metadata.classes,
+    )
+
+    return DatasetReport(
+        dataset=dataset,
+        status="optimized",
+        metadata=metadata,
+        best_params=best_params,
+        validation_score=float(best_score) if best_score is not None else None,
+        test_score=float(test_score) if test_score is not None else None,
+        forest_statistics=forest_stats,
+    )
+
+
+def _format_table(reports: Iterable[DatasetReport]) -> str:
+    """Create a readable summary table for the console."""
+
+    headers = [
+        "Dataset",
+        "Status",
+        "Train",
+        "Test",
+        "Series length",
+        "Classes",
+        "CV score",
+        "Trees",
+        "Avg depth",
+    ]
+
+    rows: List[List[str]] = []
+    for report in reports:
+        meta = report.metadata
+        stats = report.forest_statistics
+        rows.append(
+            [
+                report.dataset,
+                report.status,
+                str(meta.train_size),
+                str(meta.test_size),
+                str(meta.series_length),
+                str(meta.n_classes),
+                f"{report.validation_score:.3f}" if report.validation_score is not None else "-",
+                f"{stats.n_estimators}" if stats else "-",
+                f"{stats.avg_depth:.2f}" if stats else "-",
+            ]
+        )
+
+    col_widths = [max(len(row[i]) for row in ([headers] + rows)) for i in range(len(headers))]
+
+    def _fmt(row: Sequence[str]) -> str:
+        return " | ".join(cell.ljust(col_widths[i]) for i, cell in enumerate(row))
+
+    separator = "-+-".join("-" * width for width in col_widths)
+
+    output_lines = [_fmt(headers), separator]
+    output_lines.extend(_fmt(row) for row in rows)
+    return "\n".join(output_lines)
+
+
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    """Parse command-line arguments."""
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--datasets",
+        nargs="*",
+        default=None,
+        help="Subset of dataset names to process. Defaults to all available datasets.",
+    )
+    parser.add_argument(
+        "--n-iter",
+        type=int,
+        default=25,
+        help="Number of Bayesian optimisation iterations per dataset (default: 25).",
+    )
+    parser.add_argument(
+        "--cv",
+        type=int,
+        default=5,
+        help="Number of cross-validation folds (default: 5).",
+    )
+    parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=-1,
+        help="Number of parallel jobs for optimisation (default: -1 for all cores).",
+    )
+    parser.add_argument(
+        "--random-state",
+        type=int,
+        default=42,
+        help="Random seed for reproducibility (default: 42).",
+    )
+    parser.add_argument(
+        "--disable-bootstrap",
+        action="store_true",
+        help="Exclude bootstrap-related parameters from the optimisation search space.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Path to write the JSON report. If omitted, the report is not written to disk.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    args = parse_args(argv)
+
+    if args.datasets:
+        datasets = args.datasets
+    else:
+        datasets = AVAILABLE_DATASETS
+
+    reports: List[DatasetReport] = []
+
+    for dataset in datasets:
+        print(f"Processing dataset: {dataset}")
+        report = generate_report(
+            dataset=dataset,
+            n_iter=args.n_iter,
+            cv=args.cv,
+            n_jobs=args.n_jobs,
+            random_state=args.random_state,
+            include_bootstrap=not args.disable_bootstrap,
+        )
+        reports.append(report)
+
+    print("\n" + _format_table(reports))
+
+    if args.output:
+        payload = [report.to_json_ready() for report in reports]
+        args.output.write_text(json.dumps(payload, indent=2))
+        print(f"\nReport written to {args.output}")
+
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI entry point
+    raise SystemExit(main())
