@@ -67,6 +67,11 @@ AVAILABLE_DATASETS = [
     'UWaveGestureLibraryZ', 'WordSynonyms', 'Worms', 'WormsTwoClass'
 ]
 
+if hasattr(np, "bool8"):
+    _NUMPY_BOOL_TYPES = (np.bool_, np.bool8, bool)
+else:
+    _NUMPY_BOOL_TYPES = (np.bool_, bool)
+
 
 def convert_numpy_types(obj):
     """
@@ -86,7 +91,7 @@ def convert_numpy_types(obj):
         return int(obj)
     elif isinstance(obj, (np.floating, np.float64, np.float32, np.float16)):
         return float(obj)
-    elif isinstance(obj, (np.bool_, np.bool8)):
+    elif isinstance(obj, _NUMPY_BOOL_TYPES):
         return bool(obj)
     elif isinstance(obj, np.ndarray):
         return obj.tolist()
