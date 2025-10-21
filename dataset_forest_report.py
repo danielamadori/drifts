@@ -355,6 +355,21 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _prepare_output_path(path: Path) -> Path:
+    """Normalise the output path provided via the CLI.
+
+    When users pass an existing directory we drop the JSON file inside it.
+    Otherwise the supplied path is treated as the file destination.  Any
+    missing parent directories are created automatically.
+    """
+
+    if path.exists() and path.is_dir():
+        path = path / "dataset_forest_report.json"
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
 
@@ -387,8 +402,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.output:
         payload = [report.to_json_ready() for report in reports]
-        args.output.write_text(json.dumps(payload, indent=2))
-        print(f"\nReport written to {args.output}")
+        output_path = _prepare_output_path(args.output)
+        output_path.write_text(json.dumps(payload, indent=2))
+        print(f"\nReport written to {output_path}")
 
     return 0
 
