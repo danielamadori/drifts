@@ -37,8 +37,11 @@ Use `dataset_forest_report.py` to benchmark the Random Forest optimisation
 pipeline across Aeon datasets and gather structural statistics:
 
 ```bash
-python dataset_forest_report.py --n-iter 20 --datasets Coffee GunPoint --output forest_report.json
+python dataset_forest_report.py --output results/forest_report.json
 ```
+
+If the path supplied via `--output` already exists as a directory, the report
+is written to `dataset_forest_report.json` within that folder.
 
 The script:
 
