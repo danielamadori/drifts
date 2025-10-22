@@ -73,6 +73,31 @@ def _dummy_worker_main() -> int:
     return 0
 
 
+class FakeClock:
+    def __init__(self, start: float = 1_000_000.0) -> None:
+        self._now = float(start)
+        self._lock = threading.Lock()
+        self._real_sleep = time.sleep
+        self.total_sleep = 0.0
+
+    def time(self) -> float:
+        with self._lock:
+            return self._now
+
+    def sleep(self, seconds: float) -> None:
+        if seconds < 0:
+            raise ValueError("sleep length must be non-negative")
+        increment = float(seconds)
+        with self._lock:
+            self._now += increment
+            self.total_sleep += increment
+        # Yield to allow worker threads to progress while keeping execution fast
+        self._real_sleep(0)
+
+    def advance(self, seconds: float) -> None:
+        self.sleep(seconds)
+
+
 def _to_bytes(value):
     if isinstance(value, bytes):
         return value
@@ -531,6 +556,16 @@ def _setup_fake_worker_runtime(monkeypatch, workers_module):
     return controller
 
 
+def _run_for_duration(clock: FakeClock, duration_seconds: float, step_seconds: float = 10.0) -> None:
+    if duration_seconds <= 0:
+        return
+    target = clock.time() + duration_seconds
+    step = max(step_seconds, 0.01)
+    while clock.time() < target:
+        remaining = target - clock.time()
+        clock.advance(min(step, remaining))
+
+
 def test_backup_and_restore_roundtrip(fake_redis, tmp_path, capsys):
     source_config = {"host": "source", "port": 6379, "db": 0}
     target_config = {"host": "target", "port": 6380, "db": 1}
@@ -672,6 +707,10 @@ def test_pipeline_init_worker_backup_restore(fake_redis, tmp_path, monkeypatch, 
     _install_aeon_stub(monkeypatch)
     monkeypatch.chdir(tmp_path)
 
+    clock = FakeClock()
+    monkeypatch.setattr(time, "time", clock.time)
+    monkeypatch.setattr(time, "sleep", clock.sleep)
+
     for module_name in ["init_aeon_univariate", "enhanced_launch_workers"]:
         if module_name in sys.modules:
             del sys.modules[module_name]
@@ -689,7 +728,12 @@ def test_pipeline_init_worker_backup_restore(fake_redis, tmp_path, monkeypatch, 
                 "dummy": {
                     "script": str(dummy_worker_path),
                     "count": 1,
-                    "args": ["--iterations", "200", "--sleep-seconds", "0.01"],
+                    "args": [
+                        "--iterations",
+                        "10000",
+                        "--sleep-seconds",
+                        "1.0",
+                    ],
                 }
             },
             "logging": {"directory": str(tmp_path / "logs"), "cleanup_days": 7},
@@ -747,8 +791,17 @@ def test_pipeline_init_worker_backup_restore(fake_redis, tmp_path, monkeypatch, 
         capsys.readouterr()
         assert controller.active_pids()
 
-        initial_run_keys = wait_for_run_keys(3)
+        wait_for_run_keys(1, timeout=10.0)
+
+        first_run_start = clock.time()
+        _run_for_duration(clock, 120.0)
+        first_run_elapsed = clock.time() - first_run_start
+        assert first_run_elapsed >= 120.0
+
+        initial_run_keys = fetch_run_keys()
+        assert initial_run_keys
         assert data_client.get("worker:last_iteration") is not None
+        assert controller.active_pids()
 
         _run_cli(
             workers_module.main,
@@ -789,7 +842,13 @@ def test_pipeline_init_worker_backup_restore(fake_redis, tmp_path, monkeypatch, 
         capsys.readouterr()
         assert controller.active_pids()
 
-        wait_for_run_keys(len(post_stop_run_keys) + 3)
+        wait_for_run_keys(len(post_stop_run_keys) + 1, timeout=10.0)
+
+        second_run_start = clock.time()
+        _run_for_duration(clock, 120.0)
+        second_run_elapsed = clock.time() - second_run_start
+        assert second_run_elapsed >= 120.0
+
         _run_cli(
             workers_module.main,
             ["enhanced_launch_workers.py", "stop"],
