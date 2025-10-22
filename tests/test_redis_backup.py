@@ -4,7 +4,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Any, Dict, Tuple
 
 import pytest
 import redis
@@ -177,6 +177,31 @@ def _backup_all_databases(tmp_path: Path, capsys, prefix: str) -> Tuple[Dict[int
     return backups, backup_dir
 
 
+def _write_backup_report(
+    backups: Dict[int, dict], report_path: Path, cycle_label: str
+) -> Dict[str, Any]:
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    database_summaries: Dict[str, Dict[str, Any]] = {}
+    for db, backup in sorted(backups.items()):
+        metadata = dict(backup.get("metadata") or {})
+        database_summaries[str(db)] = {
+            "key_count": int(metadata.get("key_count", 0)),
+            "type_summary": dict(metadata.get("type_summary") or {}),
+            "created_at_utc": metadata.get("created_at_utc"),
+            "source": dict(metadata.get("source") or {}),
+        }
+
+    total_keys = sum(summary["key_count"] for summary in database_summaries.values())
+    payload: Dict[str, Any] = {
+        "cycle": cycle_label,
+        "generated_at_utc": redis_backup.utc_now_iso(),
+        "total_keys": total_keys,
+        "databases": database_summaries,
+    }
+    report_path.write_text(json.dumps(payload, indent=2) + "\n")
+    return payload
+
+
 def _restore_all_databases(backup_dir: Path) -> None:
     backups = redis_backup.load_multi_database_backup_from_directory(backup_dir)
     redis_backup.restore_multi_database_backup(
@@ -212,14 +237,6 @@ def test_pipeline_init_worker_backup_restore(redis_clients, tmp_path, capsys):
         "MelbournePedestrian",
         "--class-label",
         "1",
-        "--n-estimators",
-        "1",
-        "--max-depth",
-        "2",
-        "--random-state",
-        "0",
-        "--sample-percentage",
-        "100",
     ]
 
     _run_python_script(
@@ -245,12 +262,13 @@ def test_pipeline_init_worker_backup_restore(redis_clients, tmp_path, capsys):
     }
 
     config_path = tmp_path / "worker_config.yaml"
+    # Keep the configuration under the default filename so the launcher can be
+    # executed exactly as ``python enhanced_launch_workers.py clean-restart``
+    # without extra flags, mirroring the expected manual invocation.
     config_path.write_text(yaml.safe_dump(config))
 
     _run_python_script(
         REPO_ROOT / "enhanced_launch_workers.py",
-        "--config",
-        str(config_path),
         "clean-restart",
         cwd=tmp_path,
         timeout=120,
@@ -263,8 +281,6 @@ def test_pipeline_init_worker_backup_restore(redis_clients, tmp_path, capsys):
 
     _run_python_script(
         REPO_ROOT / "enhanced_launch_workers.py",
-        "--config",
-        str(config_path),
         "stop",
         cwd=tmp_path,
         timeout=120,
@@ -278,6 +294,15 @@ def test_pipeline_init_worker_backup_restore(redis_clients, tmp_path, capsys):
 
     backups_cycle1, backup_dir1 = _backup_all_databases(tmp_path, capsys, "backup_cycle1")
 
+    reports_dir = tmp_path / "reports"
+    report_cycle1_path = reports_dir / "cycle1_report.json"
+    report_cycle1 = _write_backup_report(backups_cycle1, report_cycle1_path, "cycle1")
+    assert report_cycle1_path.exists()
+    assert report_cycle1["cycle"] == "cycle1"
+    assert report_cycle1["total_keys"] == sum(
+        payload["metadata"]["key_count"] for payload in backups_cycle1.values()
+    )
+
     for client in redis_clients.values():
         client.flushdb()
 
@@ -290,8 +315,6 @@ def test_pipeline_init_worker_backup_restore(redis_clients, tmp_path, capsys):
 
     _run_python_script(
         REPO_ROOT / "enhanced_launch_workers.py",
-        "--config",
-        str(config_path),
         "clean-restart",
         cwd=tmp_path,
         timeout=120,
@@ -301,8 +324,6 @@ def test_pipeline_init_worker_backup_restore(redis_clients, tmp_path, capsys):
 
     _run_python_script(
         REPO_ROOT / "enhanced_launch_workers.py",
-        "--config",
-        str(config_path),
         "stop",
         cwd=tmp_path,
         timeout=120,
@@ -316,6 +337,12 @@ def test_pipeline_init_worker_backup_restore(redis_clients, tmp_path, capsys):
 
     backups_cycle2, _backup_dir2 = _backup_all_databases(tmp_path, capsys, "backup_cycle2")
 
-    total_keys_cycle1 = sum(payload["metadata"]["key_count"] for payload in backups_cycle1.values())
-    total_keys_cycle2 = sum(payload["metadata"]["key_count"] for payload in backups_cycle2.values())
-    assert total_keys_cycle2 >= total_keys_cycle1
+    report_cycle2_path = reports_dir / "cycle2_report.json"
+    report_cycle2 = _write_backup_report(backups_cycle2, report_cycle2_path, "cycle2")
+    assert report_cycle2_path.exists()
+    assert report_cycle2["cycle"] == "cycle2"
+    assert report_cycle2["total_keys"] == sum(
+        payload["metadata"]["key_count"] for payload in backups_cycle2.values()
+    )
+
+    assert report_cycle2["total_keys"] >= report_cycle1["total_keys"]
