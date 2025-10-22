@@ -141,7 +141,12 @@ def test_backup_and_restore_roundtrip(tmp_path, capsys):
     assert target_client.dbsize() == 6
     assert target_client.get(b"plain") == b"value"
     assert target_client.get(b"ephemeral") == b"temp-value"
-    assert target_client.pttl(b"ephemeral") == 5000
+    ttl_ms = target_client.pttl(b"ephemeral")
+    # Restoring a key with a TTL is subject to small timing drift depending on
+    # how long the round trip to Redis takes.  Allow a modest tolerance so the
+    # test remains robust while still ensuring the original expiry is
+    # preserved.
+    assert ttl_ms == pytest.approx(5000, abs=100)
     assert target_client.hgetall(b"hash") == {b"field1": b"value1", b"field2": b"value2"}
     assert target_client.lrange(b"numbers", 0, -1) == [b"two", b"one"]
     assert target_client.smembers(b"letters") == {b"a", b"b"}
