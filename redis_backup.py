@@ -19,6 +19,29 @@ SerializedValue = Dict[str, Any]
 DEFAULT_REDIS_DATABASES: tuple[int, ...] = tuple(range(0, 11))
 
 
+class _BinaryRedis(redis.Redis):
+    """Redis client with backwards-compatible binary-safe helpers."""
+
+    # ``redis-py`` 5.0 tightened the ``hset`` signature so that passing a
+    # mapping as the second positional argument now raises ``DataError``.  Our
+    # helpers – and the tests that exercise them – still rely on the historic
+    # behaviour where ``client.hset(name, {b"field": b"value"})`` worked.  To
+    # keep that ergonomic API we intercept the positional mapping and forward
+    # it via the keyword parameter expected by modern versions of the client.
+    def hset(
+        self,
+        name,
+        key=None,
+        value=None,
+        mapping: Mapping[object, object] | None = None,
+        items=None,
+    ):
+        if mapping is None and isinstance(key, Mapping) and value is None:
+            mapping = key
+            key = None
+        return super().hset(name, key=key, value=value, mapping=mapping, items=items)
+
+
 def build_redis_client(config: RedisConfig) -> redis.Redis:
     """Return a Redis client configured for binary-safe operations."""
     params = dict(config)
@@ -31,7 +54,7 @@ def build_redis_client(config: RedisConfig) -> redis.Redis:
     if params.get("password") in (None, ""):
         params.pop("password", None)
     params["decode_responses"] = False
-    return redis.Redis(**params)
+    return _BinaryRedis(**params)
 
 
 def encode_bytes(value: bytes) -> str:
