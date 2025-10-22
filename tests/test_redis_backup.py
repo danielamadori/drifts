@@ -367,8 +367,12 @@ def fake_redis(monkeypatch):
 def _run_cli(main_callable: Callable[[], int], argv: List[str]) -> None:
     original_argv = sys.argv[:]
     sys.argv = argv
+    stdout_buffer = io.StringIO()
+    stderr_buffer = io.StringIO()
+    result: int | None = None
     try:
-        result = main_callable()
+        with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
+            result = main_callable()
     finally:
         sys.argv = original_argv
     assert result == 0
