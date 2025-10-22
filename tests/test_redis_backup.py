@@ -18,7 +18,7 @@ import redis_backup
 
 REDIS_HOST = os.environ.get("ICDE_TEST_REDIS_HOST", "localhost")
 REDIS_PORT = int(os.environ.get("ICDE_TEST_REDIS_PORT", "6379"))
-REDIS_DBS = tuple(range(0, 10))
+REDIS_DBS = tuple(range(0, 11))
 DEFAULT_RUN_SECONDS = int(os.environ.get("ICDE_TEST_WORKER_SECONDS", "120"))
 
 
@@ -152,10 +152,11 @@ def test_backup_and_restore_roundtrip(tmp_path, capsys):
 
 
 def _backup_all_databases(tmp_path: Path, capsys, prefix: str) -> Dict[int, dict]:
-    backups: Dict[int, dict] = {}
-    for db in REDIS_DBS:
-        backup = redis_backup.create_redis_backup({"host": REDIS_HOST, "port": REDIS_PORT, "db": db})
-        backups[db] = backup
+    backups = redis_backup.create_multi_database_backup(
+        {"host": REDIS_HOST, "port": REDIS_PORT}, REDIS_DBS
+    )
+
+    for db, backup in backups.items():
         backup_path = tmp_path / f"{prefix}_db{db}.json"
         redis_backup.save_backup_to_file(backup, backup_path)
         assert backup_path.exists()
@@ -163,16 +164,14 @@ def _backup_all_databases(tmp_path: Path, capsys, prefix: str) -> Dict[int, dict
         redis_backup.display_backup_summary(backup)
         summary = capsys.readouterr().out
         assert "Number of keys" in summary
+
     return backups
 
 
 def _restore_all_databases(backups: Dict[int, dict]) -> None:
-    for db, payload in backups.items():
-        redis_backup.restore_redis_backup(
-            payload,
-            {"host": REDIS_HOST, "port": REDIS_PORT, "db": db},
-            flush_target=True,
-        )
+    redis_backup.restore_multi_database_backup(
+        backups, {"host": REDIS_HOST, "port": REDIS_PORT}, flush_each=True
+    )
 
 
 def test_pipeline_init_worker_backup_restore(redis_clients, tmp_path, capsys):

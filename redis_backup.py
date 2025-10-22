@@ -6,7 +6,7 @@ import json
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List, Mapping
 
 import redis
 from redis.exceptions import ResponseError
@@ -134,6 +134,31 @@ def create_redis_backup(config: RedisConfig, scan_count: int = 1000) -> BackupPa
     return {"metadata": metadata, "entries": entries}
 
 
+def create_multi_database_backup(
+    base_config: RedisConfig, databases: Iterable[int], scan_count: int = 1000
+) -> Dict[int, BackupPayload]:
+    """Create backups for multiple Redis databases using shared connection options.
+
+    Args:
+        base_config: Common Redis connection parameters (host, port, auth, etc.).
+        databases: Iterable of database numbers to back up.
+        scan_count: Hint for SCAN operations (forwarded to :func:`create_redis_backup`).
+
+    Returns:
+        Dictionary mapping each database number to its backup payload.
+    """
+
+    backups: Dict[int, BackupPayload] = {}
+    shared_config = dict(base_config)
+
+    for db in databases:
+        db_config = dict(shared_config)
+        db_config["db"] = db
+        backups[db] = create_redis_backup(db_config, scan_count=scan_count)
+
+    return backups
+
+
 def save_backup_to_file(backup: BackupPayload, path: Path) -> Path:
     """Write a Redis backup payload to disk as JSON."""
     path = Path(path)
@@ -230,6 +255,34 @@ def restore_redis_backup(
     return restored
 
 
+def restore_multi_database_backup(
+    backups: Mapping[int, BackupPayload],
+    base_config: RedisConfig,
+    *,
+    flush_each: bool = False,
+) -> Dict[int, int]:
+    """Restore multiple Redis databases from backup payloads.
+
+    Args:
+        backups: Mapping from database number to backup payload.
+        base_config: Common Redis connection parameters (host, port, auth, etc.).
+        flush_each: Whether to flush each database before restoring into it.
+
+    Returns:
+        Dictionary mapping database numbers to the number of restored keys.
+    """
+
+    restored_counts: Dict[int, int] = {}
+    shared_config = dict(base_config)
+
+    for db, payload in backups.items():
+        db_config = dict(shared_config)
+        db_config["db"] = db
+        restored_counts[db] = restore_redis_backup(payload, db_config, flush_target=flush_each)
+
+    return restored_counts
+
+
 __all__ = [
     "BackupEntry",
     "BackupPayload",
@@ -238,9 +291,11 @@ __all__ = [
     "create_redis_backup",
     "decode_bytes",
     "display_backup_summary",
+    "create_multi_database_backup",
     "encode_bytes",
     "get_database_overview",
     "load_backup_from_file",
+    "restore_multi_database_backup",
     "restore_redis_backup",
     "save_backup_to_file",
     "utc_now_iso",
