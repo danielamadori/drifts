@@ -1,5 +1,6 @@
 import argparse
 import base64
+import builtins
 import errno
 import importlib
 import io
@@ -364,17 +365,41 @@ def fake_redis(monkeypatch):
     return factory
 
 
-def _run_cli(main_callable: Callable[[], int], argv: List[str]) -> None:
+def _run_cli(
+    main_callable: Callable[[], int],
+    argv: List[str],
+    *,
+    patched_modules: Iterable[types.ModuleType] | None = None,
+) -> None:
     original_argv = sys.argv[:]
     sys.argv = argv
     stdout_buffer = io.StringIO()
     stderr_buffer = io.StringIO()
     result: int | None = None
+    original_print = builtins.print
+    patched: Dict[types.ModuleType, Callable[..., None]] = {}
+
+    def safe_print(*args, sep=" ", end="\n", file=None, flush=False):
+        target = file
+        if target is None or target is sys.stdout or target is sys.__stdout__:
+            target = stdout_buffer
+        elif target is sys.stderr or target is sys.__stderr__:
+            target = stderr_buffer
+        return original_print(*args, sep=sep, end=end, file=target, flush=flush)
+
     try:
+        if patched_modules:
+            for module in patched_modules:
+                if module not in patched:
+                    previous = getattr(module, "print", original_print)
+                    patched[module] = previous
+                    setattr(module, "print", safe_print)
         with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
             result = main_callable()
     finally:
         sys.argv = original_argv
+        for module, previous in patched.items():
+            setattr(module, "print", previous)
     assert result == 0
 
 
@@ -712,14 +737,22 @@ def test_pipeline_init_worker_backup_restore(fake_redis, tmp_path, monkeypatch, 
             raise AssertionError("Timed out waiting for worker activity")
 
         # First run and shutdown ---------------------------------------------
-        _run_cli(workers_module.main, ["enhanced_launch_workers.py", "clean-restart"])
+        _run_cli(
+            workers_module.main,
+            ["enhanced_launch_workers.py", "clean-restart"],
+            patched_modules=(workers_module,),
+        )
         capsys.readouterr()
         assert controller.active_pids()
 
         initial_run_keys = wait_for_run_keys(3)
         assert data_client.get("worker:last_iteration") is not None
 
-        _run_cli(workers_module.main, ["enhanced_launch_workers.py", "stop"])
+        _run_cli(
+            workers_module.main,
+            ["enhanced_launch_workers.py", "stop"],
+            patched_modules=(workers_module,),
+        )
         capsys.readouterr()
         assert not controller.active_pids()
 
@@ -746,12 +779,20 @@ def test_pipeline_init_worker_backup_restore(fake_redis, tmp_path, monkeypatch, 
         assert fetch_run_keys() == post_stop_run_keys
 
         # Second run after restore ------------------------------------------
-        _run_cli(workers_module.main, ["enhanced_launch_workers.py", "clean-restart"])
+        _run_cli(
+            workers_module.main,
+            ["enhanced_launch_workers.py", "clean-restart"],
+            patched_modules=(workers_module,),
+        )
         capsys.readouterr()
         assert controller.active_pids()
 
         wait_for_run_keys(len(post_stop_run_keys) + 3)
-        _run_cli(workers_module.main, ["enhanced_launch_workers.py", "stop"])
+        _run_cli(
+            workers_module.main,
+            ["enhanced_launch_workers.py", "stop"],
+            patched_modules=(workers_module,),
+        )
         capsys.readouterr()
         assert not controller.active_pids()
 
