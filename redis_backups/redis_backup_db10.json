@@ -1,0 +1,14 @@
+{
+  "entries": [],
+  "metadata": {
+    "created_at_utc": "2025-10-22T19:28:17.994476Z",
+    "key_count": 0,
+    "scan_count": 1000,
+    "source": {
+      "db": 10,
+      "host": "127.0.0.1",
+      "port": 6379
+    },
+    "type_summary": {}
+  }
+}
