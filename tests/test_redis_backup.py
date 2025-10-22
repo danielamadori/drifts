@@ -388,6 +388,7 @@ def _run_cli(
         return original_print(*args, sep=sep, end=end, file=target, flush=flush)
 
     try:
+        builtins.print = safe_print
         if patched_modules:
             for module in patched_modules:
                 if module not in patched:
@@ -398,6 +399,7 @@ def _run_cli(
             result = main_callable()
     finally:
         sys.argv = original_argv
+        builtins.print = original_print
         for module, previous in patched.items():
             setattr(module, "print", previous)
     assert result == 0
