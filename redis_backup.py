@@ -334,6 +334,7 @@ def restore_redis_backup(
         client.flushdb()
 
     restored = 0
+    pending_expiries: list[tuple[bytes, int]] = []
     for entry in backup.get("entries", []):
         key = decode_bytes(entry["key"])
         ttl_field = entry.get("pttl")
@@ -350,18 +351,25 @@ def restore_redis_backup(
             raise ValueError("Missing raw dump payload for backup entry")
 
         raw_value = decode_bytes(data)
-        ttl_for_restore = ttl_ms if ttl_ms is not None else 0
         try:
-            client.restore(key, ttl_for_restore, raw_value, replace=True)
+            client.restore(key, 0, raw_value, replace=True)
         except ResponseError as exc:
             message = str(exc)
             if "BUSYKEY" in message or "Target key name is busy" in message:
                 client.delete(key)
-                client.restore(key, ttl_for_restore, raw_value, replace=True)
+                client.restore(key, 0, raw_value, replace=True)
             else:
                 raise
 
+        if ttl_ms is not None:
+            pending_expiries.append((key, ttl_ms))
         restored += 1
+
+    if pending_expiries:
+        pipeline = client.pipeline(transaction=False)
+        for expire_key, ttl_ms in pending_expiries:
+            pipeline.pexpire(expire_key, ttl_ms)
+        pipeline.execute()
     return restored
 
 

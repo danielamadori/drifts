@@ -30,13 +30,15 @@ def _redis_server_available() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(
-    not _redis_server_available(), reason="Redis server not available on localhost:6379"
-)
+REDIS_SERVER_AVAILABLE = _redis_server_available()
+REDIS_UNAVAILABLE_REASON = "Redis server not available on localhost:6379"
+requires_redis = pytest.mark.skipif(not REDIS_SERVER_AVAILABLE, reason=REDIS_UNAVAILABLE_REASON)
 
 
 @pytest.fixture(scope="module")
 def redis_clients():
+    if not REDIS_SERVER_AVAILABLE:
+        pytest.skip(REDIS_UNAVAILABLE_REASON)
     clients = {db: redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=db) for db in REDIS_DBS}
     for client in clients.values():
         client.flushdb()
@@ -105,6 +107,95 @@ def test_build_redis_client_ignores_blank_username():
     assert not kwargs.get("password")
 
 
+@pytest.fixture()
+def sample_backup_payload():
+    return {
+        "metadata": {
+            "created_at_utc": "2024-01-01T12:00:00Z",
+            "source": {"host": "redis", "port": 6380, "db": 3, "username": "demo"},
+            "key_count": 3,
+            "type_summary": {"hash": 1, "string": 2},
+        },
+        "entries": [],
+    }
+
+
+def test_format_backup_summary_includes_metadata(sample_backup_payload):
+    summary = redis_backup.format_backup_summary(sample_backup_payload)
+
+    assert "Backup summary" in summary
+    assert "Created at: 2024-01-01T12:00:00Z" in summary
+    assert "Source: host=redis, port=6380, db=3, username=demo" in summary
+    assert "Number of keys: 3" in summary
+    assert "Type distribution:" in summary
+    assert "  - hash: 1" in summary
+    assert "  - string: 2" in summary
+
+
+def test_format_backup_summary_handles_missing_types(sample_backup_payload):
+    payload = sample_backup_payload
+    payload["metadata"]["type_summary"] = {}
+    payload["metadata"]["key_count"] = 0
+
+    summary = redis_backup.format_backup_summary(payload)
+
+    assert "No keys found." in summary
+    assert "Type distribution" not in summary.splitlines()
+
+
+def test_display_backup_summary_matches_formatted_output(sample_backup_payload, capsys):
+    summary = redis_backup.format_backup_summary(sample_backup_payload)
+
+    redis_backup.display_backup_summary(sample_backup_payload)
+
+    captured = capsys.readouterr().out
+    assert captured == summary + "\n"
+
+
+def test_save_and_load_backup_roundtrip(tmp_path, sample_backup_payload):
+    backup_path = tmp_path / "backup.json"
+
+    redis_backup.save_backup_to_file(sample_backup_payload, backup_path)
+    assert backup_path.exists()
+
+    loaded = redis_backup.load_backup_from_file(backup_path)
+    assert loaded == sample_backup_payload
+
+
+def test_save_and_load_multi_database_manifest(tmp_path, sample_backup_payload):
+    backups = {1: sample_backup_payload, 2: sample_backup_payload}
+
+    directory = tmp_path / "backups"
+    mapping = redis_backup.save_multi_database_backup_to_directory(
+        backups, directory, file_prefix="snapshot"
+    )
+
+    assert sorted(mapping) == [1, 2]
+
+    manifest_path = directory / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["file_prefix"] == "snapshot"
+    assert sorted(manifest["databases"]) == [1, 2]
+
+    loaded = redis_backup.load_multi_database_backup_from_directory(directory)
+    assert loaded == backups
+
+
+def test_load_multi_database_backup_missing_manifest(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        redis_backup.load_multi_database_backup_from_directory(tmp_path)
+
+
+def test_load_multi_database_backup_empty_manifest(tmp_path):
+    directory = tmp_path / "backups"
+    directory.mkdir()
+    (directory / "manifest.json").write_text(json.dumps({"files": {}}))
+
+    with pytest.raises(ValueError):
+        redis_backup.load_multi_database_backup_from_directory(directory)
+
+
+@requires_redis
 def test_backup_and_restore_roundtrip(tmp_path, capsys):
     source_config = {"host": REDIS_HOST, "port": REDIS_PORT, "db": 13}
     target_config = {"host": REDIS_HOST, "port": REDIS_PORT, "db": 14}
@@ -209,6 +300,7 @@ def _restore_all_databases(backup_dir: Path) -> None:
     )
 
 
+@requires_redis
 def test_save_and_load_multi_database_directory(redis_clients, tmp_path):
     redis_clients[0].set(b"multi:test", b"value")
     redis_clients[1].lpush(b"multi:list", b"item")
@@ -232,6 +324,7 @@ def test_save_and_load_multi_database_directory(redis_clients, tmp_path):
     redis_clients[1].flushdb()
 
 
+@requires_redis
 def test_pipeline_init_worker_backup_restore(redis_clients, tmp_path, capsys):
     init_args = [
         "MelbournePedestrian",
