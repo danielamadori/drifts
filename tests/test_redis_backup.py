@@ -1,3 +1,4 @@
+import argparse
 import base64
 import errno
 import importlib
@@ -11,6 +12,7 @@ import sys
 import threading
 import time
 import types
+import uuid
 from contextlib import redirect_stderr, redirect_stdout
 from fnmatch import fnmatch
 from pathlib import Path
@@ -18,12 +20,56 @@ from typing import Any, Callable, Dict, Iterable, List, Tuple
 
 import numpy as np
 import pytest
+import redis
 from redis.exceptions import ResponseError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import redis_backup
-from tests import dummy_worker
+
+
+_DUMMY_WORKER_SHUTDOWN_EVENT: threading.Event | None = None
+
+
+def _dummy_worker_should_stop() -> bool:
+    event = _DUMMY_WORKER_SHUTDOWN_EVENT
+    return bool(event and event.is_set())
+
+
+def _dummy_worker_main() -> int:
+    parser = argparse.ArgumentParser(description="Dummy worker for integration tests")
+    parser.add_argument("--redis-host", default="localhost")
+    parser.add_argument("--redis-port", type=int, default=6379)
+    parser.add_argument("--iterations", type=int, default=2)
+    parser.add_argument("--sleep-seconds", type=float, default=0.0)
+    args = parser.parse_args()
+
+    client = redis.Redis(host=args.redis_host, port=args.redis_port, db=0)
+
+    iterations = max(args.iterations, 0)
+    delay = max(args.sleep_seconds, 0.0)
+
+    for step in range(iterations):
+        if _dummy_worker_should_stop():
+            break
+
+        marker = f"worker:run:{uuid.uuid4().hex}"
+        payload = json.dumps({"iteration": step, "marker": marker})
+        client.set(marker, payload)
+        client.set("worker:last_iteration", str(step))
+
+        if delay:
+            remaining = delay
+            while remaining > 0:
+                if _dummy_worker_should_stop():
+                    break
+                chunk = min(0.05, remaining)
+                time.sleep(chunk)
+                remaining -= chunk
+            if _dummy_worker_should_stop():
+                break
+
+    return 0
 
 
 def _to_bytes(value):
@@ -357,11 +403,12 @@ class _FakeWorkerProcess:
         self._thread.start()
 
     def _run_worker(self) -> None:
-        script_path = Path(self._cmd[1]) if len(self._cmd) > 1 else Path(dummy_worker.__file__)
+        script_path = Path(self._cmd[1]) if len(self._cmd) > 1 else Path(__file__)
         args = self._cmd[2:]
 
-        previous_event = dummy_worker.SHUTDOWN_EVENT
-        dummy_worker.SHUTDOWN_EVENT = self._stop_event
+        global _DUMMY_WORKER_SHUTDOWN_EVENT
+        previous_event = _DUMMY_WORKER_SHUTDOWN_EVENT
+        _DUMMY_WORKER_SHUTDOWN_EVENT = self._stop_event
 
         previous_argv = sys.argv[:]
         sys.argv = [str(script_path)] + list(args)
@@ -371,14 +418,14 @@ class _FakeWorkerProcess:
         try:
             with redirect_stdout(stream), redirect_stderr(stream):
                 try:
-                    dummy_worker.main()
+                    _dummy_worker_main()
                 except SystemExit as exc:
                     if exc.code not in (0, None):
                         raise
         finally:
             if self._stdout_handle:
                 self._stdout_handle.flush()
-            dummy_worker.SHUTDOWN_EVENT = previous_event
+            _DUMMY_WORKER_SHUTDOWN_EVENT = previous_event
             sys.argv = previous_argv
             self._controller.unregister(self.pid)
 
@@ -512,7 +559,7 @@ def test_backup_and_restore_roundtrip(fake_redis, tmp_path, capsys):
 
     redis_backup.display_backup_summary(loaded_backup)
     summary_output = capsys.readouterr().out
-    assert "Numero di chiavi: 6" in summary_output
+    assert "Number of keys: 6" in summary_output
 
     target_client.set(b"plain", b"outdated")
     target_client.sadd(b"extra", b"value")
@@ -604,7 +651,7 @@ def test_pipeline_init_worker_backup_restore(fake_redis, tmp_path, monkeypatch, 
     controller = _setup_fake_worker_runtime(monkeypatch, workers_module)
 
     try:
-        dummy_worker_path = Path(__file__).parent / "dummy_worker.py"
+        dummy_worker_path = Path(__file__)
         workers_module.DEFAULT_CONFIG = {
             "redis": {"host": "localhost", "port": 6379},
             "workers": {
@@ -681,7 +728,7 @@ def test_pipeline_init_worker_backup_restore(fake_redis, tmp_path, monkeypatch, 
         capsys.readouterr()
         redis_backup.display_backup_summary(first_backup)
         summary_first = capsys.readouterr().out
-        assert "Numero di chiavi" in summary_first
+        assert "Number of keys" in summary_first
         assert first_backup_path.exists()
 
         data_client.flushdb()
@@ -714,7 +761,7 @@ def test_pipeline_init_worker_backup_restore(fake_redis, tmp_path, monkeypatch, 
         capsys.readouterr()
         redis_backup.display_backup_summary(final_backup)
         summary_final = capsys.readouterr().out
-        assert "Numero di chiavi" in summary_final
+        assert "Number of keys" in summary_final
         assert final_backup_path.exists()
 
         def decode_backup_run_keys(backup):

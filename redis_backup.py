@@ -21,7 +21,7 @@ def build_redis_client(config: RedisConfig) -> redis.Redis:
     """Return a Redis client configured for binary-safe operations."""
     params = dict(config)
     if "host" not in params:
-        raise ValueError("La configurazione deve includere la chiave 'host'.")
+        raise ValueError("Configuration must include the 'host' key.")
     params.setdefault("port", 6379)
     params.setdefault("db", 0)
     if params.get("username") in (None, ""):
@@ -39,7 +39,7 @@ def encode_bytes(value: bytes) -> str:
     if isinstance(value, bytearray):
         value = bytes(value)
     if not isinstance(value, (bytes, bytearray)):
-        raise TypeError("Il valore da codificare deve essere di tipo bytes-like.")
+        raise TypeError("The value to encode must be bytes-like.")
     return base64.b64encode(value).decode("ascii")
 
 
@@ -76,7 +76,7 @@ def _serialise_value(
     if dumped_value is None:
         if not key_still_exists():
             return None
-        raise RuntimeError(f"Impossibile serializzare la chiave {key!r}: dump vuoto")
+        raise RuntimeError(f"Failed to serialise key {key!r}: empty dump result")
     return {"encoding": "dump", "data": encode_bytes(dumped_value)}
 
 
@@ -151,30 +151,30 @@ def load_backup_from_file(path: Path) -> BackupPayload:
 def display_backup_summary(backup: BackupPayload) -> None:
     """Pretty-print a short summary of a backup payload."""
     metadata = backup.get("metadata", {})
-    print("\nRiepilogo backup")
+    print("\nBackup summary")
     print("-" * 40)
-    print(f"Creato il: {metadata.get('created_at_utc', 'n/d')}")
+    print(f"Created at: {metadata.get('created_at_utc', 'n/a')}")
     source = metadata.get("source", {})
     auth_fragment = ""
     username = source.get("username")
     if username not in (None, ""):
         auth_fragment = f", username={username}"
     print(
-        "Sorgente: host={host}, port={port}, db={db}{auth}".format(
-            host=source.get("host", "n/d"),
-            port=source.get("port", "n/d"),
-            db=source.get("db", "n/d"),
+        "Source: host={host}, port={port}, db={db}{auth}".format(
+            host=source.get("host", "n/a"),
+            port=source.get("port", "n/a"),
+            db=source.get("db", "n/a"),
             auth=auth_fragment,
         )
     )
-    print(f"Numero di chiavi: {metadata.get('key_count', 0)}")
+    print(f"Number of keys: {metadata.get('key_count', 0)}")
     type_summary = metadata.get("type_summary") or {}
     if type_summary:
-        print("Distribuzione per tipo:")
+        print("Type distribution:")
         for redis_type, count in sorted(type_summary.items()):
             print(f"  - {redis_type}: {count}")
     else:
-        print("Nessuna chiave trovata.")
+        print("No keys found.")
     print("-" * 40)
 
 
