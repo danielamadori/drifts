@@ -248,34 +248,46 @@ def load_backup_from_file(path: Path) -> BackupPayload:
         return json.load(handle)
 
 
-def display_backup_summary(backup: BackupPayload) -> None:
-    """Pretty-print a short summary of a backup payload."""
+def format_backup_summary(backup: BackupPayload) -> str:
+    """Return a formatted summary string for a Redis backup payload."""
+
     metadata = backup.get("metadata", {})
-    print("\nBackup summary")
-    print("-" * 40)
-    print(f"Created at: {metadata.get('created_at_utc', 'n/a')}")
     source = metadata.get("source", {})
     auth_fragment = ""
     username = source.get("username")
     if username not in (None, ""):
         auth_fragment = f", username={username}"
-    print(
+
+    lines = [
+        "",
+        "Backup summary",
+        "-" * 40,
+        f"Created at: {metadata.get('created_at_utc', 'n/a')}",
         "Source: host={host}, port={port}, db={db}{auth}".format(
             host=source.get("host", "n/a"),
             port=source.get("port", "n/a"),
             db=source.get("db", "n/a"),
             auth=auth_fragment,
-        )
-    )
-    print(f"Number of keys: {metadata.get('key_count', 0)}")
+        ),
+        f"Number of keys: {metadata.get('key_count', 0)}",
+    ]
+
     type_summary = metadata.get("type_summary") or {}
     if type_summary:
-        print("Type distribution:")
+        lines.append("Type distribution:")
         for redis_type, count in sorted(type_summary.items()):
-            print(f"  - {redis_type}: {count}")
+            lines.append(f"  - {redis_type}: {count}")
     else:
-        print("No keys found.")
-    print("-" * 40)
+        lines.append("No keys found.")
+
+    lines.append("-" * 40)
+    return "\n".join(lines)
+
+
+def display_backup_summary(backup: BackupPayload) -> None:
+    """Pretty-print a short summary of a backup payload."""
+
+    print(format_backup_summary(backup))
 
 
 def get_database_overview(config: RedisConfig) -> Dict[str, Any]:
@@ -367,6 +379,7 @@ __all__ = [
     "create_redis_backup",
     "decode_bytes",
     "display_backup_summary",
+    "format_backup_summary",
     "create_multi_database_backup",
     "encode_bytes",
     "get_database_overview",
