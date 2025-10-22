@@ -4,7 +4,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Tuple
 
 import pytest
 import redis
@@ -18,7 +18,7 @@ import redis_backup
 
 REDIS_HOST = os.environ.get("ICDE_TEST_REDIS_HOST", "localhost")
 REDIS_PORT = int(os.environ.get("ICDE_TEST_REDIS_PORT", "6379"))
-REDIS_DBS = tuple(range(0, 11))
+REDIS_DBS = tuple(redis_backup.DEFAULT_REDIS_DATABASES)
 DEFAULT_RUN_SECONDS = int(os.environ.get("ICDE_TEST_WORKER_SECONDS", "120"))
 
 
@@ -151,27 +151,60 @@ def test_backup_and_restore_roundtrip(tmp_path, capsys):
     ]
 
 
-def _backup_all_databases(tmp_path: Path, capsys, prefix: str) -> Dict[int, dict]:
+def _backup_all_databases(tmp_path: Path, capsys, prefix: str) -> Tuple[Dict[int, dict], Path]:
     backups = redis_backup.create_multi_database_backup(
-        {"host": REDIS_HOST, "port": REDIS_PORT}, REDIS_DBS
+        {"host": REDIS_HOST, "port": REDIS_PORT}, redis_backup.DEFAULT_REDIS_DATABASES
     )
 
-    for db, backup in backups.items():
-        backup_path = tmp_path / f"{prefix}_db{db}.json"
-        redis_backup.save_backup_to_file(backup, backup_path)
+    backup_dir = tmp_path / prefix
+    path_map = redis_backup.save_multi_database_backup_to_directory(
+        backups, backup_dir, file_prefix=prefix
+    )
+    manifest_path = backup_dir / "manifest.json"
+    assert manifest_path.exists()
+
+    loaded_backups = redis_backup.load_multi_database_backup_from_directory(backup_dir)
+    assert loaded_backups == backups
+
+    for db, backup in sorted(backups.items()):
+        backup_path = path_map[db]
         assert backup_path.exists()
         capsys.readouterr()
         redis_backup.display_backup_summary(backup)
         summary = capsys.readouterr().out
         assert "Number of keys" in summary
 
-    return backups
+    return backups, backup_dir
 
 
-def _restore_all_databases(backups: Dict[int, dict]) -> None:
+def _restore_all_databases(backup_dir: Path) -> None:
+    backups = redis_backup.load_multi_database_backup_from_directory(backup_dir)
     redis_backup.restore_multi_database_backup(
         backups, {"host": REDIS_HOST, "port": REDIS_PORT}, flush_each=True
     )
+
+
+def test_save_and_load_multi_database_directory(redis_clients, tmp_path):
+    redis_clients[0].set(b"multi:test", b"value")
+    redis_clients[1].lpush(b"multi:list", b"item")
+
+    backups = redis_backup.create_multi_database_backup(
+        {"host": REDIS_HOST, "port": REDIS_PORT}, databases=[0, 1]
+    )
+
+    backup_dir = tmp_path / "multi"
+    path_map = redis_backup.save_multi_database_backup_to_directory(
+        backups, backup_dir, file_prefix="snapshot"
+    )
+
+    assert sorted(path_map) == [0, 1]
+    assert (backup_dir / "manifest.json").exists()
+
+    loaded_backups = redis_backup.load_multi_database_backup_from_directory(backup_dir)
+    assert loaded_backups == backups
+
+    redis_clients[0].flushdb()
+    redis_clients[1].flushdb()
 
 
 def test_pipeline_init_worker_backup_restore(redis_clients, tmp_path, capsys):
@@ -243,14 +276,14 @@ def test_pipeline_init_worker_backup_restore(redis_clients, tmp_path, capsys):
     first_counts = _collect_counts()
     assert sum(first_counts.values()) > 0
 
-    backups_cycle1 = _backup_all_databases(tmp_path, capsys, "backup_cycle1")
+    backups_cycle1, backup_dir1 = _backup_all_databases(tmp_path, capsys, "backup_cycle1")
 
     for client in redis_clients.values():
         client.flushdb()
 
     assert sum(_collect_counts().values()) == 0
 
-    _restore_all_databases(backups_cycle1)
+    _restore_all_databases(backup_dir1)
 
     restored_counts = _collect_counts()
     assert restored_counts == first_counts
@@ -281,7 +314,7 @@ def test_pipeline_init_worker_backup_restore(redis_clients, tmp_path, capsys):
     second_counts = _collect_counts()
     assert sum(second_counts.values()) >= sum(first_counts.values())
 
-    backups_cycle2 = _backup_all_databases(tmp_path, capsys, "backup_cycle2")
+    backups_cycle2, _backup_dir2 = _backup_all_databases(tmp_path, capsys, "backup_cycle2")
 
     total_keys_cycle1 = sum(payload["metadata"]["key_count"] for payload in backups_cycle1.values())
     total_keys_cycle2 = sum(payload["metadata"]["key_count"] for payload in backups_cycle2.values())
