@@ -88,6 +88,7 @@ class DatasetReport:
     validation_score: Optional[float] = None
     test_score: Optional[float] = None
     forest_statistics: Optional[ForestStatistics] = None
+    endpoints_universe: Optional[Dict[str, List[float]]] = None
     error: Optional[str] = None
 
     def to_json_ready(self) -> Dict[str, Any]:
@@ -107,6 +108,8 @@ class DatasetReport:
             payload["test_score"] = self.test_score
         if self.forest_statistics is not None:
             payload["forest_statistics"] = asdict(self.forest_statistics)
+        if self.endpoints_universe is not None:
+            payload["endpoints_universe"] = convert_numpy_types(self.endpoints_universe)
         if self.error is not None:
             payload["error"] = self.error
 
@@ -278,12 +281,18 @@ def generate_report(
 
     forest_stats = _summarise_forest(best_estimator.estimators_)
 
-    # Convert to internal forest for completeness (unused result but ensures compatibility)
-    sklearn_forest_to_forest(
+    # Convert to internal forest and extract endpoints universe
+    internal_forest = sklearn_forest_to_forest(
         best_estimator,
         feature_names=feature_names,
         class_names=metadata.classes,
     )
+    
+    # Extract endpoints universe (EU) from the forest
+    try:
+        endpoints_universe = internal_forest.extract_feature_thresholds()
+    except Exception:
+        endpoints_universe = None
 
     return DatasetReport(
         dataset=dataset,
@@ -293,6 +302,7 @@ def generate_report(
         validation_score=float(best_score) if best_score is not None else None,
         test_score=float(test_score) if test_score is not None else None,
         forest_statistics=forest_stats,
+        endpoints_universe=endpoints_universe,
     )
 
 
