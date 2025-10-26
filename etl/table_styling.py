@@ -1,7 +1,7 @@
 import pandas as pd
 from typing import Any
 
-# Mappatura colonne → colormap coerente con la legenda del notebook
+# Column → colormap mapping consistent with the notebook legend
 COLUMN_COLORMAPS = {
     'n_estimators': 'Reds',
     'eu_complexity': 'Oranges',
@@ -19,11 +19,11 @@ ANALYZED_COLORS = {'YES': 'background-color: #b6e192', 'NO': 'background-color: 
 
 def style_summary_table(df: pd.DataFrame) -> Any:
     styled = df.style
-    # Applica gradienti alle colonne numeriche secondo la legenda
+    # Apply gradients to numeric columns according to the legend
     for col, cmap in COLUMN_COLORMAPS.items():
         if col in df.columns:
             styled = styled.background_gradient(subset=[col], cmap=cmap)
-    # Colora la colonna 'analyzed' in modo custom
+    # Custom coloring for the 'analyzed' column
     if 'analyzed' in df.columns:
         def analyzed_style(val):
             return ANALYZED_COLORS.get(val, '')
