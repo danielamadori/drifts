@@ -668,10 +668,10 @@ def build_db10_worker_report(selected_zip_name, selected_manifest, selected_back
     return report
 
 
-def _ensure_report(selected_zip_name):
+def _ensure_report(selected_zip_name, selected_manifest, selected_backups, selected_archive_data, selected_manifest_prefix):
     report = globals().get('DB10_WORKER_REPORT')
     if not report or report.get('zip_name') != selected_zip_name:
-        report = build_db10_worker_report(max_events=None)
+        report = build_db10_worker_report(selected_zip_name, selected_manifest, selected_backups, selected_archive_data, selected_manifest_prefix, max_events=None)
     return report
 
 
@@ -1666,8 +1666,8 @@ def _plot_histogram(df: pd.DataFrame, *, column: str, title: str, xlabel: str):
     plt.show()
 
 
-def render_worker_report(selected_zip_name):
-    report = _ensure_report(selected_zip_name)
+def render_worker_report(selected_zip_name, selected_manifest, selected_backups, selected_archive_data, selected_manifest_prefix):
+    report = _ensure_report(selected_zip_name, selected_manifest, selected_backups, selected_archive_data, selected_manifest_prefix)
     rows = _flatten_worker_summary(report)
     if not rows:
         print('No data available for the worker report.')
