@@ -330,9 +330,12 @@ def load_analyzed_df(fr_csv: Path) -> pd.DataFrame:
 
 def cast_dataset_str(df: pd.DataFrame) -> pd.DataFrame:
     """Ensure the `dataset` column exists and is a string dtype."""
+    attrs = dict(getattr(df, "attrs", {}))
     if "dataset" in df.columns:
         df = df.dropna(subset=["dataset"]).copy()
         df["dataset"] = df["dataset"].astype(str)
+    if attrs:
+        df.attrs.update(attrs)
     return df
 
 
@@ -375,6 +378,12 @@ def print_counts_summary(
     for dataset, total, counts, extras in summary:
         labeled = {DISPLAY_LABELS.get(cat, cat): count for cat, count in counts.items()}
         labeled[DISPLAY_LABELS["TOT"]] = total
+        if extras.get("log_start_min"):
+            labeled["Worker start (min)"] = extras["log_start_min"]
+        if extras.get("log_end_max"):
+            labeled["Worker end (max)"] = extras["log_end_max"]
+        if extras.get("log_duration_seconds") is not None:
+            labeled["Worker span (s)"] = round(extras["log_duration_seconds"], 3)
         print(dataset, labeled)
 
 
