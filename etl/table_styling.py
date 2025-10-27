@@ -27,6 +27,16 @@ COLUMN_COLORMAPS = {
     'avg_nodes': 'BuPu',
     'train_size': 'Purples',
     'test_size': 'RdPu',
+    'Total time (s) max': 'YlOrBr',
+    'Total time (s) mean': 'YlOrBr',
+    'ICF checks': 'PuBuGn',
+    'Reason check iteration total': 'Purples',
+    'IterGoodRatio': 'Greens',
+    'IterBadRatio': 'Reds',
+    'Earlystop Good total': 'PuBu',
+    'ESG': 'BuGn',
+    'ESB': 'Oranges',
+    'Filtrered rate': 'YlGnBu',
 }
 DEFAULT_CMAP = 'Greys'
 
@@ -59,7 +69,7 @@ def style_summary_table(df: pd.DataFrame) -> Any:
         def analyzed_style(val: Any) -> str:
             return ANALYZED_COLORS.get(val, '')
 
-        styled = styled.applymap(analyzed_style, subset=['analyzed'])
+        styled = styled.map(analyzed_style, subset=['analyzed'])
     return styled
 
 
