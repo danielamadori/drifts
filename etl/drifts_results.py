@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import binascii
 import json
 import re
 import sys
@@ -123,8 +124,26 @@ def _update_log_bounds(
     return current_min, current_max
 
 
+def _count_sample_entries(entries: Sequence[Dict[str, Any]]) -> int:
+    """Count DATA keys matching the expected sample_* pattern (excluding *_meta)."""
+    total = 0
+    for entry in entries:
+        key_b64 = entry.get("key")
+        if not isinstance(key_b64, str):
+            continue
+        try:
+            decoded = base64.b64decode(key_b64)
+        except (binascii.Error, ValueError, TypeError):
+            continue
+        key_text = decoded.decode("utf-8", errors="ignore")
+        if key_text.startswith("sample_") and not key_text.endswith("_meta"):
+            total += 1
+    return total
+
+
 def _count_in_dir(ds_dir: Path, verbose: bool = False) -> Optional[Dict[str, Any]]:
     agg: Dict[str, Any] = {cat: 0 for cat in DB_TO_CAT.values()}
+    agg["selected_sample"] = 0
     log_bounds: Tuple[Optional[datetime], Optional[datetime]] = (None, None)
     any_found = False
     for entry in ds_dir.rglob("redis_backup_db*.json"):
@@ -142,6 +161,8 @@ def _count_in_dir(ds_dir: Path, verbose: bool = False) -> Optional[Dict[str, Any
             if cat:
                 entries_list = data["entries"]
                 agg[cat] += len(entries_list)
+                if cat == "DATA":
+                    agg["selected_sample"] += _count_sample_entries(entries_list)
                 if cat == "LOGS":
                     timestamps: List[datetime] = []
                     for entry_obj in entries_list:
@@ -164,6 +185,7 @@ def _count_in_dir(ds_dir: Path, verbose: bool = False) -> Optional[Dict[str, Any
 
 def _count_in_zip(zip_path: Path, verbose: bool = False) -> Optional[Dict[str, Any]]:
     agg: Dict[str, Any] = {cat: 0 for cat in DB_TO_CAT.values()}
+    agg["selected_sample"] = 0
     log_bounds: Tuple[Optional[datetime], Optional[datetime]] = (None, None)
     any_found = False
     try:
@@ -188,6 +210,8 @@ def _count_in_zip(zip_path: Path, verbose: bool = False) -> Optional[Dict[str, A
                     if cat:
                         entries_list = data["entries"]
                         agg[cat] += len(entries_list)
+                        if cat == "DATA":
+                            agg["selected_sample"] += _count_sample_entries(entries_list)
                         if cat == "LOGS":
                             timestamps: List[datetime] = []
                             for entry_obj in entries_list:
@@ -222,7 +246,7 @@ def compute_counts_from_results(results_dir: Path, verbose: bool = False) -> pd.
     """Return a DataFrame with counts per dataset and category."""
     rows: List[Dict[str, Any]] = []
     log_info: Dict[str, Dict[str, Any]] = {}
-    base_columns = ["dataset", *DISPLAY_CATEGORIES, "TOT"]
+    base_columns = ["dataset", *DISPLAY_CATEGORIES, "TOT", "selected_sample"]
     if not results_dir.exists():
         if verbose:
             print(f"Results directory not found: {results_dir}")
@@ -238,7 +262,9 @@ def compute_counts_from_results(results_dir: Path, verbose: bool = False) -> pd.
                     if key in SUMMARY_EXTRA_COLUMNS
                 }
                 counts = {cat: agg.get(cat, 0) for cat in DISPLAY_CATEGORIES}
-                rows.append({"dataset": dataset, **counts})
+                row = {"dataset": dataset, **counts}
+                row["selected_sample"] = agg.get("selected_sample", 0)
+                rows.append(row)
                 if extras:
                     log_info[dataset] = extras
         elif entry.is_file() and entry.suffix.lower() == ".zip":
@@ -251,7 +277,9 @@ def compute_counts_from_results(results_dir: Path, verbose: bool = False) -> pd.
                     if key in SUMMARY_EXTRA_COLUMNS
                 }
                 counts = {cat: agg.get(cat, 0) for cat in DISPLAY_CATEGORIES}
-                rows.append({"dataset": dataset, **counts})
+                row = {"dataset": dataset, **counts}
+                row["selected_sample"] = agg.get("selected_sample", 0)
+                rows.append(row)
                 if extras:
                     log_info[dataset] = extras
         else:
@@ -264,7 +292,10 @@ def compute_counts_from_results(results_dir: Path, verbose: bool = False) -> pd.
             df[cat] = 0
     df[DISPLAY_CATEGORIES] = df[DISPLAY_CATEGORIES].fillna(0).astype(int)
     df["TOT"] = df[DISPLAY_CATEGORIES].sum(axis=1)
+    if "selected_sample" not in df.columns:
+        df["selected_sample"] = 0
     df = df[base_columns]
+    df["selected_sample"] = df["selected_sample"].fillna(0).astype(int)
     if log_info:
         df.attrs["log_summary"] = log_info
     return df

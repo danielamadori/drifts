@@ -64,6 +64,7 @@ RESULT_COUNT_COLUMNS = [
 	'ESG',
 	'ESB',
 	'Filtrered rate',
+	'selected_sample',
 ]
 WORKER_CAN_COLUMN_MAP = {
 	'total_time_max': 'Total time (s) max',
@@ -80,24 +81,29 @@ WORKER_CAN_COLUMN_MAP = {
 SUMMARY_INT_COLUMNS = ['train_size', 'test_size', 'series_length', 'n_estimators']
 COUNTS_INT_COLUMNS = ['ICF checks', 'Reason check iteration total', 'Earlystop Good total', 'ESG', 'ESB']
 COUNTS_FLOAT_COLUMNS = ['Total time (s) max', 'Total time (s) mean', 'IterGoodRatio', 'IterBadRatio', 'Filtrered rate']
+COUNTS_INT_COLUMNS = ['ICF checks', 'Reason check iteration total', 'Earlystop Good total', 'ESG', 'ESB', 'selected_sample']
+COUNTS_FLOAT_COLUMNS = ['Total time (s) max', 'Total time (s) mean', 'IterGoodRatio', 'IterBadRatio', 'Filtrered rate']
 COMBINED_INT_ROWS = [
-	'train_size',
-	'test_size',
-	'series_length',
-	'n_estimators',
-	'ICF checks',
-	'Reason check iteration',
+	'Train Size',
+	'Test Size',
+	'Selected Sample',
+	'Series Length',
+	'N Estimators',
+	'Total Time (ms)',
+	'ICF Checks',
+	'Reason Check Iteration',
 	'Earlystop Good',
 	'ESG',
 	'ESB',
 ]
 COMBINED_FLOAT_ROWS = [
-	'mean eu features',
-	'eu std',
-	'total time',
+	'Mean EU Features',
+	'EU Std',
+]
+COMBINED_PERCENT_ROWS = [
 	'IterGoodRadio %',
 	'IterBadRadio %',
-	'filtrered rate',
+	'Filtrered Rate %',
 ]
 
 
@@ -124,6 +130,12 @@ def _format_float_value(value: Any, *, decimals: int = 3) -> str:
 	if pd.isna(value):
 		return ''
 	return f'{float(value):.{decimals}f}'
+
+
+def _format_percent_value(value: Any, *, decimals: int = 1) -> str:
+	if pd.isna(value):
+		return ''
+	return f'{float(value):.{decimals}f}%'
 
 
 @dataclass
@@ -1217,39 +1229,53 @@ def build_combined_analyzed_table(
 		combined_df = combined_df.set_index('dataset')
 
 	combined_analyzed_df = combined_df.transpose()
-	column_labels = list(combined_analyzed_df.columns)
-	if column_labels:
-		combined_analyzed_df.loc['dataset'] = column_labels
 
 	index_renames = {
-		'Total time (s) mean': 'total time',
-		'Reason check iteration total': 'Reason check iteration',
+		'train_size': 'Train Size',
+		'test_size': 'Test Size',
+		'selected_sample': 'Selected Sample',
+		'series_length': 'Series Length',
+		'n_estimators': 'N Estimators',
+		'mean eu features': 'Mean EU Features',
+		'eu std': 'EU Std',
+		'Total time (s) mean': 'Total Time (ms)',
+		'ICF checks': 'ICF Checks',
+		'Reason check iteration total': 'Reason Check Iteration',
 		'IterGoodRatio': 'IterGoodRadio %',
 		'IterBadRatio': 'IterBadRadio %',
 		'Earlystop Good total': 'Earlystop Good',
-		'Filtrered rate': 'filtrered rate',
+		'Filtrered rate': 'Filtrered Rate %',
 	}
 	combined_analyzed_df = combined_analyzed_df.rename(index=index_renames)
 
 	target_order = [
-		'dataset',
-		'train_size',
-		'test_size',
-		'series_length',
-		'n_estimators',
-		'mean eu features',
-		'eu std',
-		'total time',
-		'ICF checks',
-		'Reason check iteration',
+		'Train Size',
+		'Test Size',
+		'Selected Sample',
+		'Series Length',
+		'N Estimators',
+		'Mean EU Features',
+		'EU Std',
+		'Total Time (ms)',
+		'ICF Checks',
+		'Reason Check Iteration',
 		'IterGoodRadio %',
 		'IterBadRadio %',
 		'Earlystop Good',
 		'ESG',
 		'ESB',
-		'filtrered rate',
+		'Filtrered Rate %',
 	]
 	combined_analyzed_df = combined_analyzed_df.reindex(target_order)
+
+	if 'Total Time (ms)' in combined_analyzed_df.index:
+		total_ms = pd.to_numeric(combined_analyzed_df.loc['Total Time (ms)'], errors='coerce') * 1000.0
+		combined_analyzed_df.loc['Total Time (ms)'] = total_ms
+
+	percent_rows_present = [row for row in COMBINED_PERCENT_ROWS if row in combined_analyzed_df.index]
+	for row in percent_rows_present:
+		percent_series = pd.to_numeric(combined_analyzed_df.loc[row], errors='coerce') * 100.0
+		combined_analyzed_df.loc[row] = percent_series
 
 	float_rows_present = [row for row in COMBINED_FLOAT_ROWS if row in combined_analyzed_df.index]
 	for row in float_rows_present:
@@ -1258,6 +1284,8 @@ def build_combined_analyzed_table(
 	combined_analyzed_df.attrs['format_int_rows'] = [row for row in COMBINED_INT_ROWS if row in combined_analyzed_df.index]
 	combined_analyzed_df.attrs['format_float_rows'] = float_rows_present
 	combined_analyzed_df.attrs['format_float_decimals'] = 3
+	combined_analyzed_df.attrs['format_percent_rows'] = percent_rows_present
+	combined_analyzed_df.attrs['format_percent_decimals'] = 1
 
 	for col in combined_analyzed_df.columns:
 		try:
@@ -1286,6 +1314,11 @@ def build_combined_analyzed_table(
 	if float_rows:
 		decimals = int(combined_analyzed_df.attrs.get('format_float_decimals', 3))
 		styled = styled.format(lambda v, d=decimals: _format_float_value(v, decimals=d), subset=pd.IndexSlice[float_rows, :])
+
+	percent_rows = combined_analyzed_df.attrs.get('format_percent_rows', [])
+	if percent_rows:
+		decimals = int(combined_analyzed_df.attrs.get('format_percent_decimals', 1))
+		styled = styled.format(lambda v, d=decimals: _format_percent_value(v, decimals=d), subset=pd.IndexSlice[percent_rows, :])
 
 	return combined_analyzed_df, styled
 
