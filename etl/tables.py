@@ -60,9 +60,9 @@ RESULT_COUNT_COLUMNS = [
 	'Reason check iteration total',
 	'IterGoodRatio',
 	'IterBadRatio',
-	'Earlystop Good total',
-	'ESG',
-	'ESB',
+	'Early Stop Good total',
+	'Early Stop from Good',
+	'Early Stop from Bad',
 	'Filtrered rate',
 	'selected_sample',
 ]
@@ -73,28 +73,27 @@ WORKER_CAN_COLUMN_MAP = {
 	'reason_iterations_total': 'Reason check iteration total',
 	'iter_good_ratio': 'IterGoodRatio',
 	'iter_bad_ratio': 'IterBadRatio',
-	'earlystop_good_total': 'Earlystop Good total',
-	'esg': 'ESG',
-	'esb': 'ESB',
+	'Early Stop_good_total': 'Early Stop Good total',
+	'Early Stop from Good': 'Early Stop from Good',
+	'Early Stop from Bad': 'Early Stop from Bad',
 	'filtrered_rate': 'Filtrered rate',
 }
 SUMMARY_INT_COLUMNS = ['train_size', 'test_size', 'series_length', 'n_estimators']
-COUNTS_INT_COLUMNS = ['ICF checks', 'Reason check iteration total', 'Earlystop Good total', 'ESG', 'ESB']
+COUNTS_INT_COLUMNS = ['ICF checks', 'Reason check iteration total', 'Early Stop Good total', 'Early Stop from Good', 'Early Stop from Bad']
 COUNTS_FLOAT_COLUMNS = ['Total time (s) max', 'Total time (s) mean', 'IterGoodRatio', 'IterBadRatio', 'Filtrered rate']
-COUNTS_INT_COLUMNS = ['ICF checks', 'Reason check iteration total', 'Earlystop Good total', 'ESG', 'ESB', 'selected_sample']
+COUNTS_INT_COLUMNS = ['ICF checks', 'Reason check iteration total', 'Early Stop Good total', 'Early Stop from Good', 'Early Stop from Bad', 'selected_sample']
 COUNTS_FLOAT_COLUMNS = ['Total time (s) max', 'Total time (s) mean', 'IterGoodRatio', 'IterBadRatio', 'Filtrered rate']
 COMBINED_INT_ROWS = [
 	'Train Size',
 	'Test Size',
-	'Selected Sample',
 	'Series Length',
 	'N Estimators',
 	'Total Time (ms)',
 	'ICF Checks',
 	'Reason Check Iteration',
-	'Earlystop Good',
-	'ESG',
-	'ESB',
+	'Early Stop Good',
+	'Early Stop from Good',
+	'Early Stop from Bad',
 ]
 COMBINED_FLOAT_ROWS = [
 	'Mean EU Features',
@@ -589,9 +588,9 @@ def compute_worker_can_metrics(results_dir: Path) -> dict[str, dict[str, Any]]:
 			'reason_iterations_bad': float(aggregate_totals['iterations_bad']),
 			'iter_good_ratio': float(aggregate_totals['iterations_good'] / total_iterations) if total_iterations else None,
 			'iter_bad_ratio': float(aggregate_totals['iterations_bad'] / total_iterations) if total_iterations else None,
-			'earlystop_good_total': float(aggregate_totals['early_stop_good_total']),
-			'esg': float(aggregate_totals['early_stop_good_result_good']),
-			'esb': float(aggregate_totals['early_stop_good_result_bad']),
+			'Early Stop_good_total': float(aggregate_totals['early_stop_good_total']),
+			'Early Stop from Good': float(aggregate_totals['early_stop_good_result_good']),
+			'Early Stop from Bad': float(aggregate_totals['early_stop_good_result_bad']),
 			'filtrered_total': float(aggregate_totals['extensions_total_good']),
 			'filtrered_filtered': float(aggregate_totals['extensions_filtered_good']),
 			'filtrered_rate': float(aggregate_totals['extensions_filtered_good'] / aggregate_totals['extensions_total_good']) if aggregate_totals['extensions_total_good'] else None,
@@ -625,9 +624,9 @@ def compute_worker_can_metrics(results_dir: Path) -> dict[str, dict[str, Any]]:
 			'reason_iterations_bad': float(overall_totals['iterations_bad']),
 			'iter_good_ratio': float(overall_totals['iterations_good'] / total_iterations) if total_iterations else None,
 			'iter_bad_ratio': float(overall_totals['iterations_bad'] / total_iterations) if total_iterations else None,
-			'earlystop_good_total': float(overall_totals['early_stop_good_total']),
-			'esg': float(overall_totals['early_stop_good_result_good']),
-			'esb': float(overall_totals['early_stop_good_result_bad']),
+			'Early Stop_good_total': float(overall_totals['early_stop_good_total']),
+			'Early Stop from Good': float(overall_totals['early_stop_good_result_good']),
+			'Early Stop from Bad': float(overall_totals['early_stop_good_result_bad']),
 			'filtrered_total': float(overall_totals['extensions_total_good']),
 			'filtrered_filtered': float(overall_totals['extensions_filtered_good']),
 			'filtrered_rate': float(overall_totals['extensions_filtered_good'] / overall_totals['extensions_total_good']) if overall_totals['extensions_total_good'] else None,
@@ -1233,7 +1232,6 @@ def build_combined_analyzed_table(
 	index_renames = {
 		'train_size': 'Train Size',
 		'test_size': 'Test Size',
-		'selected_sample': 'Selected Sample',
 		'series_length': 'Series Length',
 		'n_estimators': 'N Estimators',
 		'mean eu features': 'Mean EU Features',
@@ -1243,7 +1241,7 @@ def build_combined_analyzed_table(
 		'Reason check iteration total': 'Reason Check Iteration',
 		'IterGoodRatio': 'IterGoodRadio %',
 		'IterBadRatio': 'IterBadRadio %',
-		'Earlystop Good total': 'Earlystop Good',
+		'Early Stop Good total': 'Early Stop Good',
 		'Filtrered rate': 'Filtrered Rate %',
 	}
 	combined_analyzed_df = combined_analyzed_df.rename(index=index_renames)
@@ -1251,7 +1249,6 @@ def build_combined_analyzed_table(
 	target_order = [
 		'Train Size',
 		'Test Size',
-		'Selected Sample',
 		'Series Length',
 		'N Estimators',
 		'Mean EU Features',
@@ -1261,9 +1258,9 @@ def build_combined_analyzed_table(
 		'Reason Check Iteration',
 		'IterGoodRadio %',
 		'IterBadRadio %',
-		'Earlystop Good',
-		'ESG',
-		'ESB',
+		'Early Stop Good',
+		'Early Stop from Good',
+		'Early Stop from Bad',
 		'Filtrered Rate %',
 	]
 	combined_analyzed_df = combined_analyzed_df.reindex(target_order)
@@ -1303,8 +1300,10 @@ def build_combined_analyzed_table(
 		row_numeric = pd.to_numeric(combined_analyzed_df.loc[metric], errors='coerce')
 		if not row_numeric.notna().any():
 			continue
+		''' TODO coloration disabled
 		cmap = color_map.get(metric, default)
 		styled = styled.background_gradient(subset=pd.IndexSlice[[metric], :], cmap=cmap, axis=1)
+		'''
 
 	int_rows = combined_analyzed_df.attrs.get('format_int_rows', [])
 	if int_rows:

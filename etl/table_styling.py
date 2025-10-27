@@ -36,7 +36,6 @@ COLUMN_COLORMAPS = {
     'test_size': 'RdPu',
     'Train Size': 'Purples',
     'Test Size': 'RdPu',
-    'Selected Sample': 'Purples',
     'Series Length': 'YlOrBr',
     'N Estimators': 'Reds',
     'Total time (s) max': 'YlOrBr',
@@ -52,10 +51,10 @@ COLUMN_COLORMAPS = {
     'IterBadRatio': 'Reds',
     'IterGoodRadio %': 'Greens',
     'IterBadRadio %': 'Reds',
-    'Earlystop Good total': 'PuBu',
-    'Earlystop Good': 'PuBu',
-    'ESG': 'BuGn',
-    'ESB': 'Oranges',
+    'Early Stop Good total': 'PuBu',
+    'Early Stop Good': 'PuBu',
+    'Early Stop from Good': 'BuGn',
+    'Early Stop from Bad': 'Oranges',
     'Mean EU Features': 'Greens',
     'EU Std': 'Greens',
     'Filtrered rate': 'YlGnBu',
@@ -120,6 +119,7 @@ def style_summary_table(df: pd.DataFrame) -> Any:
         col_max = df[col].max(skipna=True)
         if pd.isna(col_min) or pd.isna(col_max):
             continue
+        ''' TODO coloration disabled
         cmap = COLUMN_COLORMAPS.get(col, DEFAULT_CMAP)
         cmap_obj = _get_truncated_cmap(cmap)
         if col_min == col_max:
@@ -131,6 +131,7 @@ def style_summary_table(df: pd.DataFrame) -> Any:
                 vmin=col_min,
                 vmax=col_max,
             )
+        '''
     if 'analyzed' in df.columns:
         def analyzed_style(val: Any) -> str:
             return ANALYZED_COLORS.get(val, '')
