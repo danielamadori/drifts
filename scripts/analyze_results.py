@@ -11,7 +11,7 @@ import sys
 if __package__ in (None, "", "__main__"):
     sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from drifts_results import (  # noqa: F401 re-export
+from etl.drifts_results import (  # noqa: F401 re-export
     CAT_LIST,
     DB_TO_CAT,
     CATEGORY_FULL_NAMES,
