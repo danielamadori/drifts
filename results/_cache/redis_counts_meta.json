@@ -1,0 +1,60 @@
+{
+  "cached_at": "2025-10-27T13:15:20.261007",
+  "source_mtime": 1761570920.255275,
+  "results_datasets": [
+    "ECG200",
+    "HandOutlines",
+    "MelbournePedestrian",
+    "MiddlePhalanxOutlineCorrect",
+    "SonyAIBORobotSurface1",
+    "Wafer",
+    "Wine"
+  ],
+  "zip_dataset_prefixes": [
+    "ECG200",
+    "HandOutlines",
+    "MelbournePedestrian",
+    "MiddlePhalanxOutlineCorrect",
+    "SonyAIBORobotSurface1",
+    "Wafer",
+    "Wine"
+  ],
+  "missing_zip_manifests": [],
+  "log_summary": {
+    "ECG200": {
+      "log_start_min": "2025-10-21T15:42:45.930897",
+      "log_end_max": "2025-10-23T01:24:31.312069",
+      "log_duration_seconds": 121305.381172
+    },
+    "HandOutlines": {
+      "log_start_min": "2025-10-25T16:18:06.781607",
+      "log_end_max": "2025-10-26T01:18:11.677513",
+      "log_duration_seconds": 32404.895906
+    },
+    "MelbournePedestrian": {
+      "log_start_min": "2025-10-23T01:55:33.429803",
+      "log_end_max": "2025-10-23T10:58:45.392791",
+      "log_duration_seconds": 32591.962988
+    },
+    "MiddlePhalanxOutlineCorrect": {
+      "log_start_min": "2025-10-23T11:12:38.852472",
+      "log_end_max": "2025-10-23T17:07:30.435706",
+      "log_duration_seconds": 21291.583234
+    },
+    "SonyAIBORobotSurface1": {
+      "log_start_min": "2025-10-25T13:54:38.357814",
+      "log_end_max": "2025-10-25T15:50:32.599164",
+      "log_duration_seconds": 6954.24135
+    },
+    "Wafer": {
+      "log_start_min": "2025-10-24T04:30:43.386122",
+      "log_end_max": "2025-10-24T17:26:16.893110",
+      "log_duration_seconds": 46533.506988
+    },
+    "Wine": {
+      "log_start_min": "2025-10-26T15:04:12.469398",
+      "log_end_max": "2025-10-27T02:27:56.216748",
+      "log_duration_seconds": 41023.74735
+    }
+  }
+}

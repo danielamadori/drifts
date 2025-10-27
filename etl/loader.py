@@ -14,6 +14,11 @@ import pandas as pd
 from IPython.core.display_functions import display
 from matplotlib import pyplot as plt, dates as mdates
 
+try:
+    import ipywidgets as widgets
+except ImportError:
+    widgets = None
+
 from etl.zip_inspector import scan_and_load, parse_zip_metadata, collect_archive_data, decode_key, try_decode_value, \
     summarise_entry_generic, DB_LABELS, _fetch_backup_metadata, summarise_entry, CANDIDATE_ANTI_REASONS_NAME, \
     CANDIDATE_REASONS_NAME, DB_DISPLAY_NAMES, BASE_COLUMNS, SCATTER_PLOTS, ADDITIONAL_SCATTER_PREFIX_PAIRS, BAR_PLOTS, \
@@ -1446,51 +1451,90 @@ def _render_combined_timeseries(series_data, *, title: str, ylabel: str):
     plt.show()
 
 
+def _draw_worker_timeseries(ax, items, ylabel: str):
+    timestamp_points = [(entry['timestamp'], entry['value']) for entry in items if entry['timestamp'] is not None]
+    if timestamp_points:
+        xs = []
+        for ts, _ in timestamp_points:
+            if hasattr(ts, 'to_pydatetime'):
+                xs.append(ts.to_pydatetime())
+            else:
+                xs.append(ts)
+        ys = [value for _, value in timestamp_points]
+        ax.plot(xs, ys, marker='o', linewidth=1)
+        locator = mdates.AutoDateLocator()
+        formatter = mdates.ConciseDateFormatter(locator)
+        ax.xaxis.set_major_locator(locator)
+        ax.xaxis.set_major_formatter(formatter)
+        ax.tick_params(axis='x', rotation=45, labelsize=7)
+        ax.set_xlabel('Start time')
+    else:
+        iteration_points = [(entry['iteration'], entry['value']) for entry in items if entry['iteration'] is not None]
+        if iteration_points:
+            xs = [float(it) for it, _ in iteration_points]
+            ys = [value for _, value in iteration_points]
+            ax.plot(xs, ys, marker='o', linewidth=1)
+            ax.set_xlabel('Iteration')
+        else:
+            xs = [entry['order'] for entry in items]
+            ys = [entry['value'] for entry in items]
+            ax.plot(xs, ys, marker='o', linewidth=1)
+            ax.set_xlabel('Event order')
+    ax.set_ylabel(ylabel)
+    ax.grid(True, alpha=0.3)
+
+
 def _render_worker_timeseries_grid(series_data, *, title: str, ylabel: str):
     if not series_data:
         print(f"Plot '{title}' skipped: insufficient data.")
         return
-    cols = 2
-    rows = (len(series_data) + cols - 1) // cols
-    fig, axes = plt.subplots(rows, cols, figsize=(14, rows * 3), squeeze=False)
-    flat_axes = axes.flatten()
-    for ax in flat_axes[len(series_data):]:
-        ax.axis('off')
-    for ax, (worker_label, items) in zip(flat_axes, series_data):
-        timestamp_points = [(entry['timestamp'], entry['value']) for entry in items if entry['timestamp'] is not None]
-        if timestamp_points:
-            xs = []
-            for ts, _ in timestamp_points:
-                if hasattr(ts, 'to_pydatetime'):
-                    xs.append(ts.to_pydatetime())
-                else:
-                    xs.append(ts)
-            ys = [value for _, value in timestamp_points]
-            ax.plot(xs, ys, marker='o', linewidth=1)
-            locator = mdates.AutoDateLocator()
-            formatter = mdates.ConciseDateFormatter(locator)
-            ax.xaxis.set_major_locator(locator)
-            ax.xaxis.set_major_formatter(formatter)
-            ax.tick_params(axis='x', rotation=45, labelsize=7)
-            ax.set_xlabel('Start time')
-        else:
-            iteration_points = [(entry['iteration'], entry['value']) for entry in items if entry['iteration'] is not None]
-            if iteration_points:
-                xs = [float(it) for it, _ in iteration_points]
-                ys = [value for _, value in iteration_points]
-                ax.plot(xs, ys, marker='o', linewidth=1)
-                ax.set_xlabel('Iteration')
-            else:
-                xs = [entry['order'] for entry in items]
-                ys = [entry['value'] for entry in items]
-                ax.plot(xs, ys, marker='o', linewidth=1)
-                ax.set_xlabel('Event order')
-        ax.set_ylabel(ylabel)
-        ax.set_title(worker_label, fontsize=9)
-        ax.grid(True, alpha=0.3)
-    fig.suptitle(title, fontsize=12)
-    fig.tight_layout(rect=(0, 0, 1, 0.96))
-    plt.show()
+    if widgets is None:
+        cols = 2
+        rows = (len(series_data) + cols - 1) // cols
+        fig, axes = plt.subplots(rows, cols, figsize=(14, rows * 3), squeeze=False)
+        flat_axes = axes.flatten()
+        for ax in flat_axes[len(series_data):]:
+            ax.axis('off')
+        for ax, (worker_label, items) in zip(flat_axes, series_data):
+            _draw_worker_timeseries(ax, items, ylabel)
+            ax.set_title(worker_label, fontsize=9)
+        fig.suptitle(title, fontsize=12)
+        fig.tight_layout(rect=(0, 0, 1, 0.96))
+        plt.show()
+        return
+
+    series_map = {label: items for label, items in series_data}
+    labels = [label for label, _ in series_data]
+
+    def _render_single_worker(worker_label: str):
+        fig, ax = plt.subplots(figsize=(10, 4))
+        _draw_worker_timeseries(ax, series_map[worker_label], ylabel)
+        ax.set_title(worker_label, fontsize=10)
+        fig.suptitle(title, fontsize=12)
+        fig.tight_layout(rect=(0, 0, 1, 0.95))
+        plt.show()
+
+    if len(labels) == 1:
+        _render_single_worker(labels[0])
+        return
+
+    dropdown = widgets.Dropdown(options=labels, value=labels[0], description='Worker')
+    output = widgets.Output()
+
+    def _update_plot(label):
+        if label is None:
+            return
+        output.clear_output(wait=True)
+        with output:
+            _render_single_worker(label)
+
+    def _on_change(change):
+        if change['name'] == 'value':
+            _update_plot(change['new'])
+
+    dropdown.observe(_on_change, names='value')
+    _update_plot(labels[0])
+    display(widgets.VBox([widgets.HTML(f"<b>{title}</b>"), dropdown, output]))
 
 
 def _plot_queue_time_series(report, df: pd.DataFrame):
@@ -1540,9 +1584,7 @@ def _plot_queue_time_series(report, df: pd.DataFrame):
         if car_points:
             car_queue_series.append((label, car_points))
     _render_combined_timeseries(queue_series, title='Queue size overview', ylabel='Queue size')
-    _render_worker_timeseries_grid(queue_series, title='Queue size per worker over time', ylabel='Queue size')
     _render_combined_timeseries(car_queue_series, title=f"{CANDIDATE_ANTI_REASONS_NAME} queue overview", ylabel=f"{CANDIDATE_ANTI_REASONS_NAME} queue size")
-    _render_worker_timeseries_grid(car_queue_series, title=f"{CANDIDATE_ANTI_REASONS_NAME} queue per worker over time", ylabel=f"{CANDIDATE_ANTI_REASONS_NAME} queue size")
 
 
 def _collect_worker_iteration_rows(report, df: pd.DataFrame):
@@ -1724,8 +1766,6 @@ def render_worker_report(selected_zip_name, selected_manifest, selected_backups,
             print(f"Plot '{config['title']}' skipped: no columns with prefix {config['prefix']!r}.")
     for config in HISTOGRAMS:
         _plot_histogram(df, column=config['column'], title=config['title'], xlabel=config['xlabel'])
-    if raw_info_columns:
-        _plot_bar(df, columns=raw_info_columns, title='Raw info totals per worker', ylabel='Count', stacked=False)
     if extensions_columns:
         _plot_bar(df, columns=extensions_columns, title='Extensions totals per worker', ylabel='Count', stacked=False)
     _plot_queue_time_series(report, df)
