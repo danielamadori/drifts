@@ -1,5 +1,10 @@
-import pandas as pd
+from functools import lru_cache
 from typing import Any
+
+import numpy as np
+import pandas as pd
+from matplotlib import cm
+from matplotlib.colors import LinearSegmentedColormap
 
 # Column -> colormap mapping consistent with the notebook legend
 COLUMN_COLORMAPS = {
@@ -8,9 +13,11 @@ COLUMN_COLORMAPS = {
     'series_length': 'YlOrBr',
     'n_features': 'YlGn',
     'mean_eu': 'Greens',
+    'mean eu features': 'Greens',
     'eu_min': 'Greens',
     'eu_max': 'Greens',
     'eu_std_dev': 'Greens',
+    'eu std': 'Greens',
     'Candidate': 'Purples',
     'Reason': 'Greens',
     'Non-reason': 'Blues',
@@ -29,16 +36,24 @@ COLUMN_COLORMAPS = {
     'test_size': 'RdPu',
     'Total time (s) max': 'YlOrBr',
     'Total time (s) mean': 'YlOrBr',
+    'total time': 'YlOrBr',
     'ICF checks': 'PuBuGn',
     'Reason check iteration total': 'Purples',
+    'Reason check iteration': 'Purples',
     'IterGoodRatio': 'Greens',
     'IterBadRatio': 'Reds',
+    'IterGoodRadio %': 'Greens',
+    'IterBadRadio %': 'Reds',
     'Earlystop Good total': 'PuBu',
+    'Earlystop Good': 'PuBu',
     'ESG': 'BuGn',
     'ESB': 'Oranges',
     'Filtrered rate': 'YlGnBu',
+    'filtrered rate': 'YlGnBu',
 }
 DEFAULT_CMAP = 'Greys'
+CMAP_MIN_VALUE = 0.25
+CMAP_COLOR_POINTS = 256
 
 ANALYZED_COLORS = {
     'YES': 'background-color: #b6e192',
@@ -47,8 +62,47 @@ ANALYZED_COLORS = {
 }
 
 
+@lru_cache(maxsize=None)
+def _get_truncated_cmap(name: str) -> LinearSegmentedColormap:
+    try:
+        base = cm.get_cmap(name)
+    except ValueError:
+        base = cm.get_cmap(DEFAULT_CMAP)
+    colors = base(np.linspace(CMAP_MIN_VALUE, 1.0, CMAP_COLOR_POINTS))
+    return LinearSegmentedColormap.from_list(f'{name}_trimmed', colors)
+
+
+def _int_formatter(value: Any) -> str:
+    if pd.isna(value):
+        return ''
+    return f'{int(round(float(value))):d}'
+
+
+def _float_formatter(decimals: int):
+    def formatter(value: Any) -> str:
+        if pd.isna(value):
+            return ''
+        return f'{float(value):.{decimals}f}'
+
+    return formatter
+
+
 def style_summary_table(df: pd.DataFrame) -> Any:
     styled = df.style
+
+    int_columns = [col for col in df.attrs.get('format_int_columns', []) if col in df.columns]
+    float_columns = [col for col in df.attrs.get('format_float_columns', []) if col in df.columns and col not in int_columns]
+    default_numeric_cols = df.select_dtypes(include='number').columns.tolist()
+    if not float_columns:
+        float_columns = [col for col in default_numeric_cols if col not in int_columns]
+    decimals = int(df.attrs.get('format_float_decimals', 3))
+
+    if int_columns:
+        styled = styled.format({col: _int_formatter for col in int_columns})
+    if float_columns:
+        float_formatter = _float_formatter(decimals)
+        styled = styled.format({col: float_formatter for col in float_columns})
+
     numeric_cols = df.select_dtypes(include='number').columns
     for col in numeric_cols:
         col_min = df[col].min(skipna=True)
@@ -56,12 +110,13 @@ def style_summary_table(df: pd.DataFrame) -> Any:
         if pd.isna(col_min) or pd.isna(col_max):
             continue
         cmap = COLUMN_COLORMAPS.get(col, DEFAULT_CMAP)
+        cmap_obj = _get_truncated_cmap(cmap)
         if col_min == col_max:
-            styled = styled.background_gradient(subset=[col], cmap=cmap)
+            styled = styled.background_gradient(subset=[col], cmap=cmap_obj)
         else:
             styled = styled.background_gradient(
                 subset=[col],
-                cmap=cmap,
+                cmap=cmap_obj,
                 vmin=col_min,
                 vmax=col_max,
             )
