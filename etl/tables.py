@@ -1097,12 +1097,9 @@ def print_models_analysis_diagnostics(payload: ModelsAnalysisContext | ModelsAna
 	print(f'? BASE_DIR     : {artifacts.base_dir}')
 	print(f'? RESULTS_DIR  : {artifacts.results_dir}')
 	print(f'? FOREST_REPORT: {artifacts.forest_csv.exists()}')
-	summary_path_display = artifacts.saved_summary_path if artifacts.saved_summary_path else '<none>'
-	print(f'? SUMMARY_FILE : {summary_path_display}')
-	print(f'? USED_CACHE   : {artifacts.used_cache}')
 
 	if artifacts.missing_zip_manifests:
-		print('ZIP senza redis manifest (primi entry mostrati):')
+		print('ZIP without redis manifest:')
 		for entry in artifacts.missing_zip_manifests:
 			if isinstance(entry, (list, tuple)) and entry:
 				name = entry[0]
@@ -1111,15 +1108,10 @@ def print_models_analysis_diagnostics(payload: ModelsAnalysisContext | ModelsAna
 				name = entry
 				sample = ''
 			print('-', name, '->', sample)
-	elif artifacts.results_dir.exists():
-		print('Tutti gli zip contengono redis_backup_db*.json (o non ci sono zip).')
-	else:
-		print('Directory results non trovata.')
+
 
 	if artifacts.results_datasets:
-		print('Dataset conteggiati:', ', '.join(sorted(artifacts.results_datasets)))
-	else:
-		print(f'Nessun redis manifest valido trovato in {artifacts.results_dir}')
+		print('Dataset:', ', '.join(sorted(artifacts.results_datasets)))
 
 
 def build_analyzed_counts_table(first_table: FirstTableArtifacts) -> tuple[pd.DataFrame, Any]:

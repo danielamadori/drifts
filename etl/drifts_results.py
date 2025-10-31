@@ -1,14 +1,4 @@
-"""Utilities to analyze drift results and expose notebook helpers.
-
-This module centralizes the logic that used to live in
-`scripts/analyze_results.py`, `drifts_results.py`, and the temporary helper
-`_tmp_counts.py`.  It can be imported from notebooks (e.g.
-`from drifts_results import compute_counts_from_results, load_analyzed_df, ...`)
-and also executed as a script to generate CSV reports or diagnostics.
-"""
-
 from __future__ import annotations
-
 import argparse
 import base64
 import binascii
