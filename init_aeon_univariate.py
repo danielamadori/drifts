@@ -1004,9 +1004,6 @@ Examples:
         print(f"🎯 Accuracy: {summary['accuracy']:.3f}")
         print(f"💾 Data stored in Redis databases")
         
-        print(f"\n🔧 System Ready for Worker Processing!")
-        print(f"   Next step: run python worker_rcheck.py")
-        
     except KeyboardInterrupt:
         print("\n⏹️  Interrupted by user")
     except Exception as e:

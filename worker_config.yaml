@@ -1,0 +1,32 @@
+logging:
+  cleanup_days: 7
+  directory: logs
+profiles:
+  development:
+    workers:
+      cache_workers:
+        args: [ ]
+        count: 8
+        script: worker_cache.py
+      rcheck_workers:
+        args: [ ]
+        count: 4
+        script: worker_cache_logged.py
+  production:
+    workers:
+      cache_workers:
+        args: []
+        count: 8
+        script: worker_cache.py
+      rcheck_workers:
+        args: []
+        count: 4
+        script: rcheck_cache.py
+redis:
+  host: localhost
+  port: 6379
+workers:
+  default:
+    args: []
+    count: 1
+    script: worker_cache.py

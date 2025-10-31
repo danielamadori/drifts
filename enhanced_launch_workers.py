@@ -62,7 +62,7 @@ DEFAULT_CONFIG = {
                     'args': []
                 },
                 'rcheck_workers': {
-                    'script': 'worker_rcheck.py',
+                    'script': 'rcheck_cache.py',
                     'count': 4,
                     'args': []
                 }
@@ -90,7 +90,7 @@ class WorkerManager:
         # Available worker scripts
         self.available_workers = {
             'worker_cache': 'worker_cache.py',
-            'worker_rcheck': 'worker_rcheck.py'
+            'rcheck_cache': 'rcheck_cache.py'
         }
     
     def load_config(self, config_path: Optional[str] = None) -> Dict[str, Any]:

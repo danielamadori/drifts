@@ -41,9 +41,9 @@ python init_aeon_univariate.py --list-datasets
 
 # Optimise a Random Forest for the ECG200 dataset using Bayesian search
 python init_aeon_univariate.py ECG200 --class-label "1" --optimize
+
 ```
 
-Key options exposed by `init_aeon_univariate.py`:
 
 #### Core arguments
 
@@ -80,13 +80,14 @@ python3 enhanced_launch_workers.py start
 python3 enhanced_launch_workers.py start --profile production
 ```
 
+Edit the file `worker_config.yaml` to customize worker settings, e.g., increase the number of workers.
+
 **Key parameters:**
 - `start` — Start workers using configuration
 - `--profile {development|production}` — Use predefined worker profiles
   - `development`: 2 cache workers with verbose logging
   - `production`: 8 cache workers + 4 rcheck workers
 - `--config FILE` — Use custom YAML configuration file
-- `--groups GROUP [GROUP ...]` — Start specific worker groups only
 
 **Other useful commands:**
 ```bash
@@ -124,22 +125,5 @@ python3 enhanced_launch_workers.py status
 
 ```bash
 # Open the analysis notebook
-jupyter notebook dataset_complexity_analysis.ipynb
+jupyter notebook models_analysis.ipynb
 ```
-
-**What you'll see:**
-- Summary table with all datasets ranked by complexity
-- EU statistics (MIN/MAX/MEAN/STD for endpoint counts)
-- Bar charts showing smallest datasets by estimator count
-
----
-
-### Dataset Complexity Metrics
-
-The system tracks multiple complexity indicators:
-
-- **n_estimators**: Number of trees in the optimized Random Forest
-- **EU complexity**: Product of mean endpoint count × number of features
-- **series_length**: Original time series length
-
-Use `dataset_complexity_analysis.ipynb` to explore correlations and generate visualizations.
