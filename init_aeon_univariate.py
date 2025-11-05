@@ -135,21 +135,21 @@ def list_available_datasets():
     print("Available Aeon Univariate Time Series Datasets:")
     print("=" * 50)
     
-    print("\n📊 Small Datasets (good for testing):")
+    print("\n[SMALL] Small Datasets (good for testing):")
     small_datasets = AVAILABLE_DATASETS[:16]
     for i, dataset in enumerate(small_datasets):
         if i % 4 == 0:
             print()
         print(f"  {dataset:<20}", end="")
     
-    print(f"\n\n📈 Medium Datasets:")
+    print(f"\n\n[MEDIUM] Medium Datasets:")
     medium_datasets = AVAILABLE_DATASETS[16:50]
     for i, dataset in enumerate(medium_datasets):
         if i % 3 == 0:
             print()
         print(f"  {dataset:<25}", end="")
     
-    print(f"\n\n📉 Large Datasets (use with caution):")
+    print(f"\n\n[LARGE] Large Datasets (use with caution):")
     large_datasets = AVAILABLE_DATASETS[50:]
     for i, dataset in enumerate(large_datasets):
         if i % 3 == 0:
@@ -321,7 +321,7 @@ def optimize_rf_hyperparameters(X_train, y_train, search_space, n_iter=50, cv=5,
     if not SKOPT_AVAILABLE:
         raise ImportError("scikit-optimize is not installed. Install with: pip install scikit-optimize")
 
-    print(f"🔍 Starting Bayesian Optimization for Random Forest hyperparameters")
+    print(f"[OPTIMIZE] Starting Bayesian Optimization for Random Forest hyperparameters")
     print(f"   Search space: {len(search_space)} hyperparameters")
     print(f"   Iterations: {n_iter}")
 
@@ -329,7 +329,7 @@ def optimize_rf_hyperparameters(X_train, y_train, search_space, n_iter=50, cv=5,
         if X_test is None or y_test is None:
             raise ValueError("X_test and y_test must be provided when use_test_for_validation=True")
         print(f"   Validation: Test set ({X_test.shape[0]} samples)")
-        print(f"   ⚠️  WARNING: Using test set for validation may lead to overfitting on test data!")
+        print(f"   WARNING: Using test set for validation may lead to overfitting on test data!")
     else:
         print(f"   Validation: {cv}-fold cross-validation")
 
@@ -381,7 +381,7 @@ def optimize_rf_hyperparameters(X_train, y_train, search_space, n_iter=50, cv=5,
             verbose=verbose > 0
         )
 
-        print(f"\n✅ Optimization complete!")
+        print(f"\n[OK] Optimization complete!")
         print(f"   Best test score: {best_score:.4f}")
         print(f"   Best parameters:")
         for param, value in best_params.items():
@@ -413,7 +413,7 @@ def optimize_rf_hyperparameters(X_train, y_train, search_space, n_iter=50, cv=5,
         )
 
         # Fit the optimizer
-        print("\n⏳ Running Bayesian optimization...")
+        print("\n[RUNNING] Running Bayesian optimization...")
         optimizer.fit(X_train, y_train)
 
         best_params = optimizer.best_params_
@@ -423,14 +423,14 @@ def optimize_rf_hyperparameters(X_train, y_train, search_space, n_iter=50, cv=5,
         test_score = None
         if X_test is not None and y_test is not None:
             test_score = optimizer.best_estimator_.score(X_test, y_test)
-            print(f"\n✅ Optimization complete!")
+            print(f"\n[OK] Optimization complete!")
             print(f"   Best CV score: {best_score:.4f}")
             print(f"   Test set score: {test_score:.4f}")
             print(f"   Best parameters:")
             for param, value in best_params.items():
                 print(f"      {param}: {value}")
         else:
-            print(f"\n✅ Optimization complete!")
+            print(f"\n[OK] Optimization complete!")
             print(f"   Best CV score: {best_score:.4f}")
             print(f"   Best parameters:")
             for param, value in best_params.items():
@@ -536,10 +536,10 @@ def store_training_set(connections, X_train, y_train, feature_names, dataset_nam
 
     try:
         connections['DATA'].set('TRAINING_SET', json.dumps(training_data))
-        print(f"✓ Training set saved successfully ({X_train.shape[0]} samples, {X_train.shape[1]} features)")
+        print(f"[OK] Training set saved successfully ({X_train.shape[0]} samples, {X_train.shape[1]} features)")
         return True
     except Exception as e:
-        print(f"❌ Failed to save training set: {e}")
+        print(f"[ERROR] Failed to save training set: {e}")
         return False
 
 
@@ -548,7 +548,7 @@ def store_forest_and_endpoints(connections, our_forest):
     # Store forest in Redis
     print("Storing Random Forest in DATA['RF']...")
     if store_forest(connections['DATA'], 'RF', our_forest):
-        print("✓ Forest saved successfully")
+        print("[OK] Forest saved successfully")
     else:
         raise Exception("Failed to save forest to Redis")
 
@@ -559,7 +559,7 @@ def store_forest_and_endpoints(connections, our_forest):
 
     print("Storing endpoints universe in DATA['EU']...")
     if store_monotonic_dict(connections['DATA'], 'EU', feature_thresholds):
-        print("✓ Endpoints universe saved successfully")
+        print("[OK] Endpoints universe saved successfully")
     else:
         raise Exception("Failed to save endpoints universe to Redis")
 
@@ -612,7 +612,7 @@ def process_all_classified_samples(connections, dataset_name, class_label, our_f
     print(f"Found {len(target_samples_data)} samples classified as '{class_label}'")
     
     if len(target_samples_data) == 0:
-        print("⚠️  No samples classified with the target label!")
+        print("[WARNING] No samples classified with the target label!")
         return [], {}
     
     # Store all samples and their ICF representations
@@ -672,7 +672,7 @@ def process_all_classified_samples(connections, dataset_name, class_label, our_f
                 correct_predictions += 1
                 
         except Exception as e:
-            print(f"⚠️  Failed to process sample {idx}: {e}")
+            print(f"[WARNING] Failed to process sample {idx}: {e}")
             continue
     
     # Store summary information
@@ -691,13 +691,13 @@ def process_all_classified_samples(connections, dataset_name, class_label, our_f
     
     connections['DATA'].set(f"summary_{dataset_name}_{class_label}", json.dumps(summary))
     
-    print(f"✓ Stored {len(stored_samples)} samples in DATA")
-    print(f"✓ Stored {len(stored_samples)} ICF representations in R")
-    print(f"✓ Correct predictions: {summary['correct_predictions']}")
-    print(f"✓ Incorrect predictions: {summary['incorrect_predictions']}")
-    print(f"✓ Accuracy: {summary['accuracy']:.3f}")
-    print(f"✓ Summary stored in DATA['summary_{dataset_name}_{class_label}']")
-    
+    print(f"[OK] Stored {len(stored_samples)} samples in DATA")
+    print(f"[OK] Stored {len(stored_samples)} ICF representations in R")
+    print(f"[OK] Correct predictions: {summary['correct_predictions']}")
+    print(f"[OK] Incorrect predictions: {summary['incorrect_predictions']}")
+    print(f"[OK] Accuracy: {summary['accuracy']:.3f}")
+    print(f"[OK] Summary stored in DATA['summary_{dataset_name}_{class_label}']")
+
     return stored_samples, summary
 
 
@@ -732,13 +732,13 @@ def initialize_seed_candidate(connections, sample_dict, our_forest, eu_data):
         'cost': cost
     }
     connections['CAN'].set(bitmap_string, json.dumps(icf_metadata))
-    print(f"✓ Stored initial candidate in CAN")
+    print(f"[OK] Stored initial candidate in CAN")
 
     # Also store in PR (Preferred Reasons) database - timestamp auto-generated
     if insert_to_pr(connections['PR'], bitmap_string, current_timestamp, icf_metadata):
-        print(f"✓ Stored initial candidate in PR")
+        print(f"[OK] Stored initial candidate in PR")
     else:
-        print(f"⚠️  Failed to store candidate in PR")
+        print(f"[WARNING] Failed to store candidate in PR")
 
     return bitmap_string, forest_icf
 
@@ -861,11 +861,11 @@ Examples:
         print(f"Getting information for dataset: {args.dataset_name}")
         info = get_dataset_info(args.dataset_name)
         if 'error' in info:
-            print(f"❌ Error loading dataset: {info['error']}")
+            print(f"[ERROR] Error loading dataset: {info['error']}")
             print("Make sure the dataset name is correct and aeon is installed.")
             return
         
-        print(f"\n📊 Dataset Information: {args.dataset_name}")
+        print(f"\n[INFO] Dataset Information: {args.dataset_name}")
         print(f"  Training samples: {info['train_size']}")
         print(f"  Test samples: {info['test_size']}")
         print(f"  Series length: {info['series_length']}")
@@ -875,18 +875,18 @@ Examples:
         
         if args.class_label:
             if args.class_label in [str(c) for c in info['classes']]:
-                print(f"✓ Target class label '{args.class_label}' is valid")
+                print(f"[OK] Target class label '{args.class_label}' is valid")
             else:
-                print(f"❌ Target class label '{args.class_label}' not found in dataset classes")
+                print(f"[ERROR] Target class label '{args.class_label}' not found in dataset classes")
                 print(f"   Available classes: {info['classes']}")
         
         return
     
-    print(f"🚀 Initializing Random Path Worker System")
-    print(f"📊 Dataset: {args.dataset_name}")
-    print(f"🎯 Target Class Label: {args.class_label}")
-    print(f"📊 Sample Percentage: {args.sample_percentage}%")
-    
+    print(f"[START] Initializing Random Path Worker System")
+    print(f"[INFO] Dataset: {args.dataset_name}")
+    print(f"[INFO] Target Class Label: {args.class_label}")
+    print(f"[INFO] Sample Percentage: {args.sample_percentage}%")
+
     try:
         # Connect to Redis
         connections, db_mapping = connect_redis(port=args.redis_port)
@@ -913,7 +913,7 @@ Examples:
         # Optionally optimize RF hyperparameters with Bayesian optimization
         if args.optimize_rf:
             if not SKOPT_AVAILABLE:
-                print("❌ Error: scikit-optimize is not installed.")
+                print("[ERROR] Error: scikit-optimize is not installed.")
                 print("   Install with: pip install scikit-optimize")
                 return 1
 
@@ -952,17 +952,17 @@ Examples:
             # Convert numpy types to native Python types for JSON serialization
             opt_results_serializable = convert_numpy_types(opt_results)
             connections['DATA'].set('RF_OPTIMIZATION_RESULTS', json.dumps(opt_results_serializable))
-            print(f"✓ Optimization results saved to DATA['RF_OPTIMIZATION_RESULTS']")
+            print(f"[OK] Optimization results saved to DATA['RF_OPTIMIZATION_RESULTS']")
 
             # Use optimized parameters
             rf_params = {**best_params, 'random_state': args.random_state}
-            print(f"\n🎯 Using optimized parameters for final model")
+            print(f"\n[OPTIMIZE] Using optimized parameters for final model")
 
         else:
             # Use manually specified parameters
             rf_params = create_forest_params(args)
 
-        print(f"🌳 Forest Parameters: {rf_params}")
+        print(f"[INFO] Forest Parameters: {rf_params}")
 
         # Train and convert forest
         sklearn_rf, our_forest, X_train_used, y_train_used = train_and_convert_forest(
@@ -993,21 +993,21 @@ Examples:
         
         # Store the target label for worker compatibility
         connections['DATA'].set('label', args.class_label)
-        print(f"🏷️  Target label '{args.class_label}' set for worker processing")
-        
-        print(f"\n🎉 Successfully initialized {args.dataset_name}")
-        print(f"📈 Forest: {len(our_forest)} trees")
-        print(f"📋 Features: {len(feature_names)}")
-        print(f"🎯 Processed: {summary['total_samples_processed']} samples with label '{args.class_label}'")
-        print(f"✅ Correct: {summary['correct_predictions']}")
-        print(f"❌ Incorrect: {summary['incorrect_predictions']}")
-        print(f"🎯 Accuracy: {summary['accuracy']:.3f}")
-        print(f"💾 Data stored in Redis databases")
-        
+        print(f"[INFO] Target label '{args.class_label}' set for worker processing")
+
+        print(f"\n[SUCCESS] Successfully initialized {args.dataset_name}")
+        print(f"[INFO] Forest: {len(our_forest)} trees")
+        print(f"[INFO] Features: {len(feature_names)}")
+        print(f"[INFO] Processed: {summary['total_samples_processed']} samples with label '{args.class_label}'")
+        print(f"[OK] Correct: {summary['correct_predictions']}")
+        print(f"[ERROR] Incorrect: {summary['incorrect_predictions']}")
+        print(f"[INFO] Accuracy: {summary['accuracy']:.3f}")
+        print(f"[INFO] Data stored in Redis databases")
+
     except KeyboardInterrupt:
-        print("\n⏹️  Interrupted by user")
+        print("\n[INTERRUPTED] Interrupted by user")
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[ERROR] Error: {e}")
         import traceback
         print(f"Traceback: {traceback.format_exc()}")
         return 1
