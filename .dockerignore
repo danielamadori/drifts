@@ -43,12 +43,7 @@ test_all_optimize_results.json
 dataset_test_results.txt
 dataset_test_results.json
 
-# Documentation (optional - keep if needed)
-*.md
-!README.md
 
-# Docker
-Dockerfile
 .dockerignore
 
 # Workers runtime data
@@ -60,7 +55,6 @@ results/*.csv
 results/_cache/*
 
 # Jupyter notebooks
-*.ipynb
 .ipynb_checkpoints/
 
 # Redis dumps
