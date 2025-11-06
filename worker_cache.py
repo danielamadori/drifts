@@ -385,11 +385,11 @@ def main():
                 if ar_result:
                     total_info['car_confirmed_ar'] += 1
                     if VERBOSE_ITERATION:
-                        print(f"CAR: Result: ✓ CONFIRMED as anti-reason")
+                        print(f"CAR: Result: [OK] CONFIRMED as anti-reason")
                 else:
                     total_info['car_not_ar'] += 1
                     if VERBOSE_ITERATION:
-                        print(f"CAR: Result: ✗ NOT an anti-reason")
+                        print(f"CAR: Result: [FAIL] NOT an anti-reason")
                 
                 # Delete from CAR after processing
                 delete_from_can(connections['CAR'], car_candidate)
@@ -463,7 +463,7 @@ def main():
 
             if result:
                 if VERBOSE_ITERATION:
-                    print(f"CAN: Result: ✓ GOOD (Reason)")
+                    print(f"CAN: Result: [OK] GOOD (Reason)")
                     print(f"CAN: Time: {can_time:.4f}s")
                     
                     # Show key internal stats from rcheck_cache
@@ -604,7 +604,7 @@ def main():
 
             else:
                 if VERBOSE_ITERATION:
-                    print(f"CAN: Result: ✗ BAD (Non-Reason)")
+                    print(f"CAN: Result: [FAIL] BAD (Non-Reason)")
                     print(f"CAN: Time: {can_time:.4f}s")
                     
                     # Show key internal stats from rcheck_cache
@@ -649,7 +649,7 @@ def main():
 
             # Show iteration summary
             if VERBOSE_ITERATION:
-                print(f"\n{'─'*80}")
+                print(f"\n{'-'*80}")
                 if car_candidate:
                     iteration_time = car_time + can_time
                     print(f"Iteration {iteration} complete: {iteration_time:.4f}s")
@@ -660,9 +660,9 @@ def main():
                 print(f"{'='*80}")
 
     except KeyboardInterrupt:
-        print("\n\n⚠️  Interrupted by user")
+        print("\n\n[INTERRUPTED] Interrupted by user")
     except Exception as e:
-        print(f"\n\n❌ Error occurred: {e}")
+        print(f"\n\n[ERROR] Error occurred: {e}")
         import traceback
         traceback.print_exc()
 

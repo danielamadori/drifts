@@ -552,9 +552,9 @@ def main():
                       f"Speed: {iteration/elapsed:.2f} iter/s, Queue: {len(queue)} (CAN) / {len(car_queue)} (CAR)")
 
     except KeyboardInterrupt:
-        print("\n\n⚠️  Interrupted by user")
+        print("\n\n[INTERRUPTED] Interrupted by user")
     except Exception as e:
-        print(f"\n\n❌ Error occurred: {e}")
+        print(f"\n\n[ERROR] Error occurred: {e}")
         import traceback
         traceback.print_exc()
 

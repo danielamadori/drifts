@@ -101,22 +101,22 @@ class WorkerManager:
             config_file = Path(config_path)
             
             if not config_file.exists():
-                raise FileNotFoundError(f"❌ Specified config file not found: {config_file}")
+                raise FileNotFoundError(f"[ERROR] Specified config file not found: {config_file}")
             
-            print(f"📄 Loading configuration from {config_file}")
+            print(f"[CONFIG] Loading configuration from {config_file}")
             
             try:
                 with open(config_file, 'r') as f:
                     loaded_config = yaml.safe_load(f) or {}
             except yaml.YAMLError as e:
-                raise ValueError(f"❌ Invalid YAML syntax in {config_file}: {e}")
+                raise ValueError(f"[ERROR] Invalid YAML syntax in {config_file}: {e}")
             except Exception as e:
-                raise ValueError(f"❌ Error reading config file {config_file}: {e}")
+                raise ValueError(f"[ERROR] Error reading config file {config_file}: {e}")
             
             # Validate the config has required structure
             self.validate_config(loaded_config, config_file)
             
-            print(f"✅ Using configuration from {config_file} (pure mode)")
+            print(f"[OK] Using configuration from {config_file} (pure mode)")
             return loaded_config
         
         else:
@@ -129,21 +129,21 @@ class WorkerManager:
             
             for possible in possible_configs:
                 if possible.exists():
-                    print(f"📄 Auto-detected configuration file: {possible}")
+                    print(f"[CONFIG] Auto-detected configuration file: {possible}")
                     try:
                         with open(possible, 'r') as f:
                             loaded_config = yaml.safe_load(f) or {}
                         
                         self.validate_config(loaded_config, possible)
-                        print(f"✅ Using auto-detected configuration from {possible}")
+                        print(f"[OK] Using auto-detected configuration from {possible}")
                         return loaded_config
                     
                     except Exception as e:
-                        print(f"⚠️  Error loading auto-detected config {possible}: {e}")
+                        print(f"[WARNING]  Error loading auto-detected config {possible}: {e}")
                         continue
             
             # No config file found or specified - use built-in defaults
-            print("🔄 Using built-in default configuration")
+            print("[RESTART] Using built-in default configuration")
             return DEFAULT_CONFIG.copy()
 
     def validate_config(self, config: Dict[str, Any], config_file: Path):
@@ -210,7 +210,7 @@ class WorkerManager:
         
         # If there are validation errors, raise them
         if errors:
-            error_msg = f"❌ Configuration validation errors in {config_file}:\n"
+            error_msg = f"[ERROR] Configuration validation errors in {config_file}:\n"
             for i, error in enumerate(errors, 1):
                 error_msg += f"  {i}. {error}\n"
             raise ValueError(error_msg)
@@ -219,11 +219,11 @@ class WorkerManager:
         """Save the default configuration to a YAML file"""
         config_file = Path(output_path)
         
-        print(f"📝 Saving default configuration to {config_file}")
+        print(f"[LOG] Saving default configuration to {config_file}")
         with open(config_file, 'w') as f:
             yaml.dump(DEFAULT_CONFIG, f, default_flow_style=False, indent=2)
         
-        print(f"✅ Configuration saved to {config_file}")
+        print(f"[OK] Configuration saved to {config_file}")
         return True
     
     def get_timestamp(self):
@@ -264,13 +264,13 @@ class WorkerManager:
             profiles = self.config.get('profiles', {})
             if profile not in profiles:
                 available_profiles = list(profiles.keys()) if profiles else ['none']
-                raise ValueError(f"❌ Profile '{profile}' not found. Available profiles: {available_profiles}")
+                raise ValueError(f"[ERROR] Profile '{profile}' not found. Available profiles: {available_profiles}")
             
             profile_config = profiles[profile]
             workers = profile_config.get('workers', {})
             
             if not workers:
-                raise ValueError(f"❌ Profile '{profile}' has no workers defined")
+                raise ValueError(f"[ERROR] Profile '{profile}' has no workers defined")
             
             print(f"🎯 Using profile: {profile}")
             return workers
@@ -278,7 +278,7 @@ class WorkerManager:
             # No profile specified, use default workers
             default_workers = self.config.get('workers', {})
             if not default_workers:
-                raise ValueError("❌ No default workers defined and no profile specified")
+                raise ValueError("[ERROR] No default workers defined and no profile specified")
             
             return default_workers
     
@@ -287,20 +287,20 @@ class WorkerManager:
         worker_configs = self.get_worker_config(profile)
         
         if not worker_configs:
-            print("❌ No worker configurations found")
+            print("[ERROR] No worker configurations found")
             return False
         
         # Filter worker groups if specified
         if worker_groups:
             filtered_configs = {k: v for k, v in worker_configs.items() if k in worker_groups}
             if not filtered_configs:
-                print(f"❌ No matching worker groups found: {worker_groups}")
+                print(f"[ERROR] No matching worker groups found: {worker_groups}")
                 print(f"💡 Available groups: {list(worker_configs.keys())}")
                 return False
             worker_configs = filtered_configs
         
         print(f"🚀 Starting workers from configuration")
-        print(f"📊 Worker groups: {list(worker_configs.keys())}")
+        print(f"[STATUS] Worker groups: {list(worker_configs.keys())}")
         
         timestamp = self.get_timestamp()
         pids_data = self.load_pids()
@@ -321,26 +321,26 @@ class WorkerManager:
             profile_config = self.config['profiles'][profile]
             if 'redis' in profile_config:
                 redis_config = profile_config['redis']
-                print(f"🔗 Using Redis from profile '{profile}': {redis_config['host']}:{redis_config['port']}")
+                print(f"[REDIS] Using Redis from profile '{profile}': {redis_config['host']}:{redis_config['port']}")
             else:
                 # Fall back to top-level Redis config
                 redis_config = self.config.get('redis', redis_config)
-                print(f"🔗 Using top-level Redis config: {redis_config['host']}:{redis_config['port']}")
+                print(f"[REDIS] Using top-level Redis config: {redis_config['host']}:{redis_config['port']}")
         else:
             # No profile or profile doesn't exist, use top-level Redis config
             redis_config = self.config.get('redis', redis_config)
-            print(f"🔗 Using top-level Redis config: {redis_config['host']}:{redis_config['port']}")
+            print(f"[REDIS] Using top-level Redis config: {redis_config['host']}:{redis_config['port']}")
         
         for group_name, group_config in worker_configs.items():
             script = group_config.get('script', 'worker_cache.py')
             count = group_config.get('count', 1)
             base_args = group_config.get('args', [])
             
-            print(f"\n🔧 Starting {count} instances of {script} (group: {group_name})")
+            print(f"\n[START] Starting {count} instances of {script} (group: {group_name})")
             
             # Check if script exists
             if not os.path.exists(script):
-                print(f"❌ Worker script '{script}' not found, skipping group {group_name}")
+                print(f"[ERROR] Worker script '{script}' not found, skipping group {group_name}")
                 continue
             
             for i in range(count):
@@ -354,8 +354,8 @@ class WorkerManager:
                 
                 log_file = self.get_log_filename(worker_id, script, timestamp)
                 
-                print(f"  🔧 Starting {worker_id}...")
-                print(f"     📝 Log file: {log_file}")
+                print(f"  [START] Starting {worker_id}...")
+                print(f"     [LOG] Log file: {log_file}")
                 
                 # Prepare command with Redis configuration and custom args
                 cmd = [sys.executable, script]
@@ -397,19 +397,19 @@ class WorkerManager:
                     active_workers[worker_id] = worker_info
                     started_workers.append(worker_id)
                     
-                    print(f"     ✅ Started with PID {process.pid}")
+                    print(f"     [OK] Started with PID {process.pid}")
                     time.sleep(0.5)  # Small delay between starts
                     
                 except Exception as e:
-                    print(f"     ❌ Failed to start {worker_id}: {e}")
+                    print(f"     [ERROR] Failed to start {worker_id}: {e}")
                     continue
         
         # Save updated PIDs
         self.save_pids(active_workers)
         
-        print(f"\n🎉 Successfully started {len(started_workers)} workers")
+        print(f"\n[SUCCESS] Successfully started {len(started_workers)} workers")
         print(f"📁 Logs directory: {self.logs_dir.absolute()}")
-        print(f"🔧 Worker PIDs saved to: {self.pids_file}")
+        print(f"[START] Worker PIDs saved to: {self.pids_file}")
         
         # Show quick status
         self.show_status()
@@ -422,7 +422,7 @@ class WorkerManager:
         
         if not os.path.exists(worker_script):
             available = ', '.join(self.available_workers.values())
-            print(f"❌ Worker script '{worker_script}' not found")
+            print(f"[ERROR] Worker script '{worker_script}' not found")
             print(f"💡 Available workers: {available}")
             return False
         
@@ -437,14 +437,14 @@ class WorkerManager:
         
         started_workers = []
         redis_config = self.config.get('redis', {'host': 'localhost', 'port': 6379})
-        print(f"🔗 Using Redis config: {redis_config['host']}:{redis_config['port']}")
+        print(f"[REDIS] Using Redis config: {redis_config['host']}:{redis_config['port']}")
         
         for i in range(num_workers):
             worker_id = f"worker_{len(active_workers) + i + 1}"
             log_file = self.get_log_filename(worker_id, worker_script, timestamp)
             
-            print(f"  🔧 Starting {worker_id}...")
-            print(f"     📝 Log file: {log_file}")
+            print(f"  [START] Starting {worker_id}...")
+            print(f"     [LOG] Log file: {log_file}")
             
             # Prepare command
             cmd = [sys.executable, worker_script]
@@ -483,17 +483,17 @@ class WorkerManager:
                 active_workers[worker_id] = worker_info
                 started_workers.append(worker_id)
                 
-                print(f"     ✅ Started with PID {process.pid}")
+                print(f"     [OK] Started with PID {process.pid}")
                 time.sleep(0.5)  # Small delay between starts
                 
             except Exception as e:
-                print(f"     ❌ Failed to start {worker_id}: {e}")
+                print(f"     [ERROR] Failed to start {worker_id}: {e}")
                 continue
         
         # Save updated PIDs
         self.save_pids(active_workers)
         
-        print(f"\n🎉 Successfully started {len(started_workers)} workers")
+        print(f"\n[SUCCESS] Successfully started {len(started_workers)} workers")
         return len(started_workers) > 0
     
     def stop_workers(self, worker_ids=None):
@@ -501,7 +501,7 @@ class WorkerManager:
         pids_data = self.load_pids()
         
         if not pids_data:
-            print("📭 No workers found")
+            print("[EMPTY] No workers found")
             return True
         
         if worker_ids:
@@ -512,10 +512,10 @@ class WorkerManager:
             workers_to_stop = pids_data
         
         if not workers_to_stop:
-            print("📭 No matching workers found")
+            print("[EMPTY] No matching workers found")
             return True
         
-        print(f"🛑 Stopping {len(workers_to_stop)} workers...")
+        print(f"[STOP] Stopping {len(workers_to_stop)} workers...")
         
         stopped_count = 0
         remaining_workers = {}
@@ -523,7 +523,7 @@ class WorkerManager:
         for worker_id, worker_info in pids_data.items():
             if worker_id in workers_to_stop:
                 pid = worker_info['pid']
-                print(f"  🛑 Stopping {worker_id} (PID {pid})...")
+                print(f"  [STOP] Stopping {worker_id} (PID {pid})...")
                 
                 try:
                     if self.is_process_running(pid):
@@ -537,17 +537,17 @@ class WorkerManager:
                         
                         # Force kill if still running
                         if self.is_process_running(pid):
-                            print(f"     ⚠️  Force killing {worker_id}...")
+                            print(f"     [WARNING]  Force killing {worker_id}...")
                             os.kill(pid, signal.SIGKILL)
                         
-                        print(f"     ✅ Stopped {worker_id}")
+                        print(f"     [OK] Stopped {worker_id}")
                         stopped_count += 1
                     else:
-                        print(f"     ℹ️  {worker_id} was not running")
+                        print(f"     [INFO]  {worker_id} was not running")
                         stopped_count += 1
                         
                 except Exception as e:
-                    print(f"     ❌ Error stopping {worker_id}: {e}")
+                    print(f"     [ERROR] Error stopping {worker_id}: {e}")
                     remaining_workers[worker_id] = worker_info
             else:
                 # Keep this worker
@@ -556,7 +556,7 @@ class WorkerManager:
         # Save remaining workers
         self.save_pids(remaining_workers)
         
-        print(f"\n✅ Stopped {stopped_count} workers")
+        print(f"\n[OK] Stopped {stopped_count} workers")
         return True
     
     def show_status(self):
@@ -564,10 +564,10 @@ class WorkerManager:
         pids_data = self.load_pids()
         
         if not pids_data:
-            print("📭 No workers registered")
+            print("[EMPTY] No workers registered")
             return
         
-        print(f"\n📊 Worker Status ({len(pids_data)} workers)")
+        print(f"\n[STATUS] Worker Status ({len(pids_data)} workers)")
         print("=" * 100)
         
         active_count = 0
@@ -588,7 +588,7 @@ class WorkerManager:
                 groups[group] = groups.get(group, {'active': 0, 'inactive': 0})
                 groups[group]['active'] += 1
             else:
-                status = "🔴 STOPPED"
+                status = "[STOPPED] STOPPED"
                 inactive_count += 1
                 groups[group] = groups.get(group, {'active': 0, 'inactive': 0})
                 groups[group]['inactive'] += 1
@@ -612,17 +612,17 @@ class WorkerManager:
         pids_data = self.load_pids()
         
         if worker_id and worker_id not in pids_data:
-            print(f"❌ Worker '{worker_id}' not found")
+            print(f"[ERROR] Worker '{worker_id}' not found")
             return False
         
         if worker_id:
             # View specific worker log
             log_file = Path(pids_data[worker_id]['log_file'])
             if not log_file.exists():
-                print(f"❌ Log file not found: {log_file}")
+                print(f"[ERROR] Log file not found: {log_file}")
                 return False
             
-            print(f"📋 Viewing log for {worker_id}: {log_file.name}")
+            print(f"[VIEW] Viewing log for {worker_id}: {log_file.name}")
             
             if follow:
                 # Follow log in real-time
@@ -638,7 +638,7 @@ class WorkerManager:
         else:
             # View all logs
             if not pids_data:
-                print("📭 No workers found")
+                print("[EMPTY] No workers found")
                 return False
             
             for wid, worker_info in sorted(pids_data.items()):
@@ -669,11 +669,11 @@ class WorkerManager:
                 for line in content_lines[-lines:]:
                     print(line, end='')
         except Exception as e:
-            print(f"❌ Error reading log: {e}")
+            print(f"[ERROR] Error reading log: {e}")
     
     def _tail_follow(self, log_file):
         """Follow log file in real-time (like tail -f)"""
-        print(f"📡 Following {log_file.name} (Press Ctrl+C to stop)")
+        print(f"[FOLLOW] Following {log_file.name} (Press Ctrl+C to stop)")
         
         try:
             with open(log_file, 'r') as f:
@@ -687,7 +687,7 @@ class WorkerManager:
                     else:
                         time.sleep(0.1)
         except KeyboardInterrupt:
-            print("\n📴 Stopped following log")
+            print("\n[DONE] Stopped following log")
     
     def cleanup_old_logs(self, days=None):
         """Clean up old log files"""
@@ -703,9 +703,9 @@ class WorkerManager:
             if log_file.stat().st_mtime < cutoff_time:
                 log_file.unlink()
                 cleaned_count += 1
-                print(f"  🗑️  Deleted {log_file.name}")
+                print(f"  [DELETE]  Deleted {log_file.name}")
         
-        print(f"✅ Cleaned up {cleaned_count} old log files")
+        print(f"[OK] Cleaned up {cleaned_count} old log files")
 
     def clean_directories(self):
         """Clean and recreate logs and workers directories"""
@@ -715,49 +715,49 @@ class WorkerManager:
         
         # Clean logs directory
         if self.logs_dir.exists():
-            print(f"  🗑️  Removing logs directory: {self.logs_dir}")
+            print(f"  [DELETE]  Removing logs directory: {self.logs_dir}")
             shutil.rmtree(self.logs_dir)
         
         self.logs_dir.mkdir(exist_ok=True)
-        print(f"  ✅ Recreated logs directory: {self.logs_dir}")
+        print(f"  [OK] Recreated logs directory: {self.logs_dir}")
         
         # Clean workers directory (including PID file)
         if self.workers_dir.exists():
-            print(f"  🗑️  Removing workers directory: {self.workers_dir}")
+            print(f"  [DELETE]  Removing workers directory: {self.workers_dir}")
             shutil.rmtree(self.workers_dir)
         
         self.workers_dir.mkdir(exist_ok=True)
-        print(f"  ✅ Recreated workers directory: {self.workers_dir}")
+        print(f"  [OK] Recreated workers directory: {self.workers_dir}")
         
-        print("✅ Directories cleaned and recreated")
+        print("[OK] Directories cleaned and recreated")
     
     def clean_restart(self, profile: Optional[str] = None, worker_groups: Optional[List[str]] = None):
         """Stop all workers, clean directories, and start fresh"""
-        print("🔄 Starting clean restart sequence...")
+        print("[RESTART] Starting clean restart sequence...")
         print("=" * 60)
         
         # Step 1: Stop all workers
-        print("\n📍 Step 1/3: Stopping all workers")
+        print("\n[STEP] Step 1/3: Stopping all workers")
         self.stop_workers()
         
         # Step 2: Clean directories
-        print("\n📍 Step 2/3: Cleaning directories")
+        print("\n[STEP] Step 2/3: Cleaning directories")
         self.clean_directories()
         
         # Step 3: Start workers
-        print("\n📍 Step 3/3: Starting workers")
+        print("\n[STEP] Step 3/3: Starting workers")
         success = self.start_workers_from_config(profile, worker_groups)
         
         if success:
-            print("\n🎉 Clean restart completed successfully!")
+            print("\n[SUCCESS] Clean restart completed successfully!")
         else:
-            print("\n⚠️  Clean restart completed with some failures")
+            print("\n[WARNING]  Clean restart completed with some failures")
         
         return success
     
     def show_config(self):
         """Show current configuration"""
-        print("📄 Current Configuration:")
+        print("[CONFIG] Current Configuration:")
         print("=" * 50)
         print(yaml.dump(self.config, default_flow_style=False, indent=2))
 
@@ -900,10 +900,10 @@ Examples:
             return 0
             
     except KeyboardInterrupt:
-        print("\n⏹️  Interrupted by user")
+        print("\n[INTERRUPTED]  Interrupted by user")
         return 1
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] Error: {e}")
         return 1
 
 
