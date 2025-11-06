@@ -210,8 +210,11 @@ This completes in 2-5 minutes and confirms:
 Run comprehensive tests on all available datasets (88 datasets from UCR Time Series Archive):
 
 ```bash
-# Windows
-RUN_NOW.bat
+# Windows (guided)
+tests.bat
+
+# Windows (start immediately)
+tests.bat now
 
 # Or directly with Python
 python test_datasets_with_workers.py --worker-duration 20
@@ -245,7 +248,7 @@ python test_datasets_with_workers.py --worker-profile production --worker-durati
 Open a second terminal and run:
 ```bash
 # Windows
-MONITOR.bat
+monitor_tests.bat monitor
 
 # Or with Python
 python monitor_live.py
@@ -261,6 +264,8 @@ The monitor shows:
 **Output files:**
 - `test_datasets_workers.log` - Detailed execution log
 - `test_datasets_workers.json` - Results summary in JSON format
+
+See `TESTING.md` for an in-depth guide to Windows testing and monitoring tools.
 
 **Example results:**
 ```json
