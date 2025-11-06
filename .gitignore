@@ -10,3 +10,13 @@ logs/
 results/_cache/_counts_cache.csv
 
 results/_cache/redis_counts_meta.json
+
+results/ChlorineConcentration_1_false_0.zip
+
+results/ElectricDevices_1_false_0.zip
+
+results/FacesUCR_1_false_0.zip
+
+results/FordA_-1_false_0.zip
+
+results/Wafer_-1_false_0.zip
