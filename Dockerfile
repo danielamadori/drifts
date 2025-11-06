@@ -27,13 +27,15 @@ RUN mkdir -p logs workers fig results /var/log/supervisor
 # Copia configurazione supervisor
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Espone porta Redis
+# Espone porte
 EXPOSE 6379
+EXPOSE 8888
 
 # Variabili d'ambiente
 ENV PYTHONUNBUFFERED=1 \
     REDIS_HOST=localhost \
-    REDIS_PORT=6379
+    REDIS_PORT=6379 \
+    JUPYTER_ENABLE_LAB=yes
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

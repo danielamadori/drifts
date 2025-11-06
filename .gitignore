@@ -4,3 +4,37 @@
 __pycache__/
 
 logs/
+
+# Temporary test output files (not the test scripts themselves!)
+temp/
+test_output.log
+test_run.log
+test_run_live.log
+test_run_output.txt
+test_execution.log
+
+# Test results that get regenerated
+test_datasets_workers.log
+test_datasets_workers.json
+
+# Worker runtime files (regenerated)
+workers/worker_pids.json
+
+# Results - keep structure but ignore generated content
+results/*.zip
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# Python cache
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+

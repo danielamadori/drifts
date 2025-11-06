@@ -191,44 +191,165 @@ jupyter notebook models_analysis.ipynb
 
 ## Automated Testing
 
-### Test All Datasets with Optimization and Workers
+### Quick Test (Single Dataset)
 
-The `test_all_optimize_with_workers.py` script automatically tests all datasets with Bayesian optimization and optionally runs workers to verify the setup works correctly.
+Verify everything works with a quick test:
 
-**Basic usage (optimize only):**
 ```bash
-python test_all_optimize_with_workers.py
+python test_datasets_with_workers.py --max-datasets 1 --worker-duration 10
 ```
 
-**With worker execution (20 seconds per dataset):**
+This completes in 2-5 minutes and confirms:
+- ✅ Dataset initialization works
+- ✅ Workers start correctly
+- ✅ Processing completes
+- ✅ Error detection functions
+
+### Test All Datasets
+
+Run comprehensive tests on all available datasets (88 datasets from UCR Time Series Archive):
+
 ```bash
-python test_all_optimize_with_workers.py --worker-duration 20
+# Windows
+RUN_NOW.bat
+
+# Or directly with Python
+python test_datasets_with_workers.py --worker-duration 20
 ```
 
-**Advanced options:**
+**What it does for each dataset:**
+1. Initialize with Bayesian optimization (`--optimize`)
+2. Start workers using the 'default' profile (1 worker)
+3. Let workers process for 20 seconds
+4. Stop workers and check for errors
+5. **Stops immediately if any error occurs**
+6. Moves to next dataset if successful
+
+**Command options:**
 ```bash
-# Test only first 3 datasets with workers
-python test_all_optimize_with_workers.py --worker-duration 20 --max-datasets 3
+# Test first 5 datasets only
+python test_datasets_with_workers.py --max-datasets 5 --worker-duration 20
 
-# Use production profile for workers
-python test_all_optimize_with_workers.py --worker-duration 20 --worker-profile production
+# Test specific datasets
+python test_datasets_with_workers.py --datasets Coffee Wine ECG200 --worker-duration 20
 
-# Continue on errors instead of stopping
-python test_all_optimize_with_workers.py --worker-duration 20 --continue-on-error
+# Continue even if errors occur (don't stop)
+python test_datasets_with_workers.py --worker-duration 20 --continue-on-error
 
-# Skip workers explicitly
-python test_all_optimize_with_workers.py --skip-workers
+# Use different worker profile
+python test_datasets_with_workers.py --worker-profile production --worker-duration 20
 ```
 
-**Results:**
-- Log file: `test_all_optimize_results.txt` - Human-readable log
-- JSON file: `test_all_optimize_results.json` - Machine-readable results
+**Monitor progress in real-time:**
 
-**What it does:**
-1. For each dataset: Load and identify all classes
-2. Run `init_aeon_univariate.py` with `--optimize` for the first class
-3. If `--worker-duration` > 0: Launch workers for specified seconds
-4. Verify no errors occurred in both optimization and worker execution
-5. Move to next dataset (or stop on first error if `--continue-on-error` not set)
+Open a second terminal and run:
+```bash
+# Windows
+MONITOR.bat
+
+# Or with Python
+python monitor_live.py
+```
+
+The monitor shows:
+- ⏱️ Elapsed time
+- 📊 Progress (completed/failed/total)
+- 📝 Last 25 lines of execution log
+- ❌ Failed datasets with error details
+- 🔄 Auto-refresh every 5 seconds
+
+**Output files:**
+- `test_datasets_workers.log` - Detailed execution log
+- `test_datasets_workers.json` - Results summary in JSON format
+
+**Example results:**
+```json
+{
+  "success": ["Coffee", "ECG200", "GunPoint"],
+  "failed": {
+    "ProblematicDataset": {
+      "status": "init_failed",
+      "error": "Error message..."
+    }
+  },
+  "config": {
+    "worker_profile": "default",
+    "worker_duration": 20,
+    "total_datasets": 88
+  }
+}
+```
+
+**Estimated time:**
+- Per dataset: ~2-10 minutes (init + optimize) + 20 seconds (workers)
+- All 88 datasets: **4-13 hours**
+
+---
+
+## Project Structure
+
+```
+drifts/
+├── README.md                          # Main documentation
+├── DOCKER_GUIDE.md                    # Docker setup guide
+├── requirements.txt                   # Python dependencies
+│
+├── init_aeon_univariate.py           # Dataset initialization script
+├── enhanced_launch_workers.py        # Worker management system
+├── test_datasets_with_workers.py     # Automated testing script
+├── monitor_live.py                   # Live test monitoring
+├── worker_config.yaml                # Worker configuration
+│
+├── worker_cache.py                   # Worker script (simple)
+├── worker_cache_logged.py            # Worker script (with logging)
+├── ar_check_cache.py                 # Alternative worker script
+├── rcheck_cache.py                   # R-check worker script
+│
+├── tree.py                           # Tree utilities
+├── forest.py                         # Forest utilities
+├── cost_function.py                  # Cost function implementation
+├── helpers.py                        # Helper functions
+│
+├── docker/                           # Docker configuration
+│   └── supervisord.conf              # Supervisor config for container
+├── Dockerfile                        # Docker image definition
+├── run.bat / run.sh                  # Docker management scripts
+│
+├── scripts/                          # Utility and helper scripts
+│   ├── utilities/                    # Data conversion utilities
+│   ├── monitoring/                   # Monitoring scripts
+│   ├── testing/                      # Test scripts
+│   ├── redis_tools/                  # Redis management tools
+│   └── README.md                     # Scripts documentation
+│
+├── notebooks/                        # Jupyter notebooks
+│   ├── models_analysis.ipynb         # Model analysis
+│   ├── redis_*.ipynb                 # Redis management notebooks
+│   └── README.md                     # Notebooks documentation
+│
+├── redis_helpers/                    # Redis helper modules
+│   ├── endpoints.py
+│   ├── forest.py
+│   ├── icf.py
+│   ├── preferred.py
+│   ├── samples.py
+│   └── utils.py
+│
+├── etl/                              # ETL and reporting tools
+│
+├── logs/                             # Worker logs (auto-generated)
+├── workers/                          # Worker PID files (auto-generated)
+├── results/                          # Test results (auto-generated)
+└── temp/                             # Temporary files (auto-generated)
+```
+
+---
+
+## Documentation
+
+- **README.md** (this file) - Complete project documentation
+- **DOCKER_GUIDE.md** - Docker setup and usage guide
+- **scripts/README.md** - Documentation for utility scripts
+- **notebooks/README.md** - Documentation for Jupyter notebooks
 
 ---
