@@ -6,16 +6,26 @@ Test automatico dei dataset con init optimize e worker
 - Verifica assenza errori
 - Passa al prossimo dataset
 """
+import json
+import signal
 import subprocess
 import sys
 import time
-import signal
-import json
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
+PYTHON_BIN = sys.executable
+
+
+def with_python(*args):
+    """Prefix helper to ensure spawned commands reuse the active interpreter."""
+    return [PYTHON_BIN, *args]
 
 def run_cmd(args, timeout=None):
     """Esegue un comando e cattura l'output"""
+    if args and args[0] == 'python':
+        args = with_python(*args[1:])
+
     try:
         result = subprocess.run(
             args,
@@ -45,7 +55,7 @@ def write_log(log_file, message):
 def stop_all_workers():
     """Ferma tutti i worker attivi"""
     print("  Stopping workers...")
-    result = run_cmd(['python', 'enhanced_launch_workers.py', 'stop'], timeout=30)
+    result = run_cmd(with_python('enhanced_launch_workers.py', 'stop'), timeout=30)
     time.sleep(2)  # Attendi che i worker si fermino completamente
     return result.returncode == 0
 
@@ -53,7 +63,7 @@ def start_workers(profile='default'):
     """Avvia worker con un profilo specifico usando enhanced_launch_workers.py"""
     print(f"  Starting workers (profile: {profile})...")
 
-    args = ['python', 'enhanced_launch_workers.py', 'start']
+    args = with_python('enhanced_launch_workers.py', 'start')
     if profile != 'default':
         args.extend(['--profile', profile])
 
@@ -104,7 +114,7 @@ def start_workers(profile='default'):
 
 def get_dataset_list():
     """Ottieni lista dei dataset disponibili"""
-    result = run_cmd(['python', 'init_aeon_univariate.py', '--list-datasets'])
+    result = run_cmd(with_python('init_aeon_univariate.py', '--list-datasets'))
     if result.returncode != 0:
         return None
 
@@ -130,7 +140,7 @@ def get_dataset_list():
 
 def get_dataset_classes(dataset_name):
     """Ottieni le classi di un dataset usando --info"""
-    result = run_cmd(['python', 'init_aeon_univariate.py', dataset_name, '--info'])
+    result = run_cmd(with_python('init_aeon_univariate.py', dataset_name, '--info'))
 
     if result.returncode != 0:
         return None
@@ -180,12 +190,15 @@ def test_dataset(dataset_name, class_label, log_file, worker_profile='default', 
 
     # Step 1: Inizializza con optimize
     write_log(log_file, f"  [1/3] Running init with optimize...")
-    init_result = run_cmd([
-        'python', 'init_aeon_univariate.py',
-        dataset_name,
-        '--class-label', str(class_label),
-        '--optimize'
-    ], timeout=600)  # 10 minuti max
+    init_result = run_cmd(
+        with_python(
+            'init_aeon_univariate.py',
+            dataset_name,
+            '--class-label', str(class_label),
+            '--optimize'
+        ),
+        timeout=600
+    )  # 10 minuti max
 
     if hasattr(init_result, 'timeout') and init_result.timeout:
         write_log(log_file, f"  [ERROR] Init timeout (>10 minutes)")
