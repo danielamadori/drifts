@@ -57,10 +57,10 @@ run.bat help       # Show help
 ## What Gets Created
 
 The container includes:
-- ✅ **Redis Server** on port 6379
-- ✅ **Python 3.11** with all dependencies
-- ✅ **Supervisor** to manage services
-- ✅ **Volume mounts** for:
+- **Redis Server** on port 6379
+- **Python 3.11** with all dependencies
+- **Supervisor** to manage services
+- **Volume mounts** for:
   - `logs/` - Worker logs
   - `workers/` - Worker PID tracking
   - `results/` - Test results
@@ -199,29 +199,3 @@ Check port mapping:
 docker ps
 # Should show: 0.0.0.0:6379->6379/tcp
 ```
-
-## Advantages of Docker
-
-✅ **Isolated Environment**: No conflicts with system packages
-✅ **Pre-configured Redis**: No separate Redis installation needed
-✅ **Reproducible**: Same environment everywhere
-✅ **Easy Cleanup**: Just remove container
-✅ **Cross-platform**: Works on Windows, Linux, macOS
-
-## Native vs Docker
-
-### Use Native (Without Docker) if:
-- You already have Redis installed
-- You prefer direct system access
-- You want faster I/O for large datasets
-
-### Use Docker if:
-- You want isolated environment
-- You don't want to install Redis separately
-- You want reproducible setup
-- You're sharing the project with others
-
----
-
-**Both approaches work perfectly with the DRIFTS test system!**
-
