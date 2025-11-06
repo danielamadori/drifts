@@ -8,6 +8,59 @@ into Redis-backed caches.
 
 ## Installation
 
+### Option 1: Docker (Recommended)
+
+Docker provides an isolated environment with Redis pre-configured.
+
+**Requirements:**
+- Docker Desktop installed and running
+  - Windows: https://www.docker.com/products/docker-desktop
+  - Linux/macOS: https://docs.docker.com/get-docker/
+
+**Quick Start:**
+
+```bash
+# Windows
+run.bat
+
+# Linux/macOS
+chmod +x run.sh  # First time only
+./run.sh
+```
+
+This will build the Docker image and start a container with Redis on `localhost:6379`.
+
+**Available Commands:**
+
+| Command | Windows | Linux/macOS | Description |
+|---------|---------|-------------|-------------|
+| Start | `run.bat` or `run.bat start` | `./run.sh` or `./run.sh start` | Build and start container |
+| Stop | `run.bat stop` | `./run.sh stop` | Stop container |
+| Shell | `run.bat shell` | `./run.sh shell` | Open bash shell in container |
+| Logs | `run.bat logs` | `./run.sh logs` | View container logs |
+| Restart | `run.bat restart` | `./run.sh restart` | Restart container |
+| Help | `run.bat help` | `./run.sh help` | Show help |
+
+**Using the container:**
+
+```bash
+# Open shell in container
+run.bat shell  # Windows
+./run.sh shell # Linux/macOS
+
+# Inside the container, run any script:
+python init_aeon_univariate.py Coffee --class-label 0 --optimize
+python enhanced_launch_workers.py start --profile development
+```
+
+The following directories are automatically mounted and accessible from your host:
+- `./logs` - Application logs
+- `./workers` - Workers configuration
+- `./results` - Experiment results
+- `./fig` - Plots and visualizations
+
+### Option 2: Local Installation
+
 1. **Create a virtual environment (recommended)**
 
    ```bash
@@ -63,6 +116,8 @@ Run `python init_aeon_univariate.py --help` to view the auto-generated help mess
 
 ## Quick Start Tutorial
 
+> **Note:** If using Docker, run `run.bat shell` (Windows) or `./run.sh shell` (Linux/macOS) first to enter the container, then execute the commands below.
+
 ### Step 1: Test with a Single Dataset (5 minutes)
 
 ```bash
@@ -76,7 +131,10 @@ python3 init_aeon_univariate.py Coffee --class-label "0" --optimize
 # Launch workers to process the initialized dataset (default: 1 worker)
 python3 enhanced_launch_workers.py start
 
-# Or use production profile (8 cache workers + 4 rcheck workers)
+# Or use development profile (4 workers with logging)
+python3 enhanced_launch_workers.py start --profile development
+
+# Or use production profile (4 workers with logging)
 python3 enhanced_launch_workers.py start --profile production
 ```
 
@@ -84,9 +142,10 @@ Edit the file `worker_config.yaml` to customize worker settings, e.g., increase 
 
 **Key parameters:**
 - `start` — Start workers using configuration
-- `--profile {development|production}` — Use predefined worker profiles
-  - `development`: 2 cache workers with verbose logging
-  - `production`: 8 cache workers + 4 rcheck workers
+- `--profile {default|development|production}` — Use predefined worker profiles
+  - `default`: 1 worker with `worker_cache.py`
+  - `development`: 4 workers with `worker_cache_logged.py`
+  - `production`: 4 workers with `worker_cache_logged.py`
 - `--config FILE` — Use custom YAML configuration file
 
 **Other useful commands:**
@@ -127,3 +186,49 @@ python3 enhanced_launch_workers.py status
 # Open the analysis notebook
 jupyter notebook models_analysis.ipynb
 ```
+
+---
+
+## Automated Testing
+
+### Test All Datasets with Optimization and Workers
+
+The `test_all_optimize_with_workers.py` script automatically tests all datasets with Bayesian optimization and optionally runs workers to verify the setup works correctly.
+
+**Basic usage (optimize only):**
+```bash
+python test_all_optimize_with_workers.py
+```
+
+**With worker execution (20 seconds per dataset):**
+```bash
+python test_all_optimize_with_workers.py --worker-duration 20
+```
+
+**Advanced options:**
+```bash
+# Test only first 3 datasets with workers
+python test_all_optimize_with_workers.py --worker-duration 20 --max-datasets 3
+
+# Use production profile for workers
+python test_all_optimize_with_workers.py --worker-duration 20 --worker-profile production
+
+# Continue on errors instead of stopping
+python test_all_optimize_with_workers.py --worker-duration 20 --continue-on-error
+
+# Skip workers explicitly
+python test_all_optimize_with_workers.py --skip-workers
+```
+
+**Results:**
+- Log file: `test_all_optimize_results.txt` - Human-readable log
+- JSON file: `test_all_optimize_results.json` - Machine-readable results
+
+**What it does:**
+1. For each dataset: Load and identify all classes
+2. Run `init_aeon_univariate.py` with `--optimize` for the first class
+3. If `--worker-duration` > 0: Launch workers for specified seconds
+4. Verify no errors occurred in both optimization and worker execution
+5. Move to next dataset (or stop on first error if `--continue-on-error` not set)
+
+---

@@ -1,0 +1,69 @@
+# Git and version control
+.git
+.gitignore
+.gitattributes
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and temporary files
+*.log
+logs/*.log
+*.tmp
+
+# Test results
+test_all_optimize_results.txt
+test_all_optimize_results.json
+dataset_test_results.txt
+dataset_test_results.json
+
+# Documentation (optional - keep if needed)
+*.md
+!README.md
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Workers runtime data
+workers/*.json
+
+# Results (keep structure but not data)
+results/*.zip
+results/*.csv
+results/_cache/*
+
+# Jupyter notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Redis dumps
+dump.rdb
+appendonly.aof
+

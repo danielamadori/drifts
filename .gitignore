@@ -3,16 +3,4 @@
 
 __pycache__/
 
-.vscode/settings.json
-
-dump.rdb
-
-results/FacesUCR_1_false_0.zip
-
-results/ChlorineConcentration_1_false_0.zip
-
-results/ElectricDevices_1_false_0.zip
-
-results/Wafer_-1_false_0.zip
-
 logs/

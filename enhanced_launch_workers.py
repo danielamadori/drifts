@@ -22,7 +22,6 @@ import time
 import datetime
 import json
 import signal
-import threading
 import yaml
 from pathlib import Path
 from typing import Dict, List, Any, Optional
@@ -272,12 +271,22 @@ class WorkerManager:
             if not workers:
                 raise ValueError(f"[ERROR] Profile '{profile}' has no workers defined")
             
-            print(f"🎯 Using profile: {profile}")
+            print(f"[PROFILE] Using profile: {profile}")
             return workers
         else:
-            # No profile specified, use default workers
+            # No profile specified, try default workers first
             default_workers = self.config.get('workers', {})
-            if not default_workers:
+
+            # If no default workers, try to use 'default' profile
+            if not default_workers or len(default_workers) == 0:
+                profiles = self.config.get('profiles', {})
+                if 'default' in profiles:
+                    print("[PROFILE] Using default profile")
+                    profile_config = profiles['default']
+                    workers = profile_config.get('workers', {})
+                    if workers:
+                        return workers
+
                 raise ValueError("[ERROR] No default workers defined and no profile specified")
             
             return default_workers
@@ -295,11 +304,11 @@ class WorkerManager:
             filtered_configs = {k: v for k, v in worker_configs.items() if k in worker_groups}
             if not filtered_configs:
                 print(f"[ERROR] No matching worker groups found: {worker_groups}")
-                print(f"💡 Available groups: {list(worker_configs.keys())}")
+                print(f"[INFO] Available groups: {list(worker_configs.keys())}")
                 return False
             worker_configs = filtered_configs
         
-        print(f"🚀 Starting workers from configuration")
+        print(f"[START] Starting workers from configuration")
         print(f"[STATUS] Worker groups: {list(worker_configs.keys())}")
         
         timestamp = self.get_timestamp()
@@ -316,12 +325,21 @@ class WorkerManager:
         # Get Redis configuration - profile-specific first, then top-level, then defaults
         redis_config = {'host': 'localhost', 'port': 6379}  # Default fallback
         
-        if profile and profile in self.config.get('profiles', {}):
+        # Determine which profile is actually being used
+        actual_profile = profile
+        if not actual_profile:
+            # Check if we're using the default profile
+            default_workers = self.config.get('workers', {})
+            if not default_workers or len(default_workers) == 0:
+                if 'default' in self.config.get('profiles', {}):
+                    actual_profile = 'default'
+
+        if actual_profile and actual_profile in self.config.get('profiles', {}):
             # Use profile-specific Redis config if available
-            profile_config = self.config['profiles'][profile]
+            profile_config = self.config['profiles'][actual_profile]
             if 'redis' in profile_config:
                 redis_config = profile_config['redis']
-                print(f"[REDIS] Using Redis from profile '{profile}': {redis_config['host']}:{redis_config['port']}")
+                print(f"[REDIS] Using Redis from profile '{actual_profile}': {redis_config['host']}:{redis_config['port']}")
             else:
                 # Fall back to top-level Redis config
                 redis_config = self.config.get('redis', redis_config)
@@ -408,22 +426,22 @@ class WorkerManager:
         self.save_pids(active_workers)
         
         print(f"\n[SUCCESS] Successfully started {len(started_workers)} workers")
-        print(f"📁 Logs directory: {self.logs_dir.absolute()}")
+        print(f"[LOGS] Logs directory: {self.logs_dir.absolute()}")
         print(f"[START] Worker PIDs saved to: {self.pids_file}")
         
-        # Show quick status
-        self.show_status()
+        # Note: show_status() removed here to speed up start command completion
+        # Use 'python enhanced_launch_workers.py status' to see worker status
         
         return len(started_workers) > 0
     
     def start_workers(self, num_workers, worker_script='worker_cache.py', extra_args=None):
         """Legacy method for backward compatibility"""
-        print(f"🚀 Starting {num_workers} instances of {worker_script} (legacy mode)")
-        
+        print(f"[START] Starting {num_workers} instances of {worker_script} (legacy mode)")
+
         if not os.path.exists(worker_script):
             available = ', '.join(self.available_workers.values())
             print(f"[ERROR] Worker script '{worker_script}' not found")
-            print(f"💡 Available workers: {available}")
+            print(f"[INFO] Available workers: {available}")
             return False
         
         timestamp = self.get_timestamp()
@@ -583,7 +601,7 @@ class WorkerManager:
             redis_config = worker_info.get('redis_config', {'host': 'unknown', 'port': 'unknown'})
             
             if self.is_process_running(pid):
-                status = "🟢 RUNNING"
+                status = "[RUNNING]"
                 active_count += 1
                 groups[group] = groups.get(group, {'active': 0, 'inactive': 0})
                 groups[group]['active'] += 1
@@ -697,8 +715,8 @@ class WorkerManager:
         cutoff_time = time.time() - (days * 24 * 3600)
         cleaned_count = 0
         
-        print(f"🧹 Cleaning up logs older than {days} days...")
-        
+        print(f"[CLEANUP] Cleaning up logs older than {days} days...")
+
         for log_file in self.logs_dir.glob("*.log"):
             if log_file.stat().st_mtime < cutoff_time:
                 log_file.unlink()
@@ -711,8 +729,8 @@ class WorkerManager:
         """Clean and recreate logs and workers directories"""
         import shutil
         
-        print("🧹 Cleaning directories...")
-        
+        print("[CLEAN] Cleaning directories...")
+
         # Clean logs directory
         if self.logs_dir.exists():
             print(f"  [DELETE]  Removing logs directory: {self.logs_dir}")
