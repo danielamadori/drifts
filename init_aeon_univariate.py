@@ -565,8 +565,17 @@ def store_forest_and_endpoints(connections, our_forest):
     return feature_thresholds
 
 
-def process_all_classified_samples(connections, dataset_name, class_label, our_forest, 
-                                 X_test, y_test, feature_names, eu_data, sigmas, sample_percentage=None):
+def process_all_classified_samples(
+    connections,
+    dataset_name,
+    class_label,
+    our_forest,
+    X_test,
+    y_test,
+    feature_names,
+    eu_data,
+    sample_percentage=None,
+):
     """
     Process all test samples that are classified with the specified class label
     Store samples in DATA and their ICF representations in R
@@ -629,8 +638,7 @@ def process_all_classified_samples(connections, dataset_name, class_label, our_f
             'test_index': sample_data['test_index'],
             'dataset_name': dataset_name,
             'timestamp': current_time,
-            'prediction_correct': sample_data['prediction_correct'],
-            'sigmas' : sigmas[sample_data["test_index"]]  # Add sigmas to sample metadata
+            'prediction_correct': sample_data['prediction_correct']
         }
         
         # Store sample using our helper function
@@ -660,7 +668,6 @@ def process_all_classified_samples(connections, dataset_name, class_label, our_f
                 'icf_bitmap': icf_bitmap,
                 'prediction_correct': sample_data['prediction_correct'],
                 'test_index': sample_data['test_index']#,
-                #'sigmas' : sigmas[sample_data["test_index"]]  # Add sigmas to sample metadata
             })
             
             if sample_data['prediction_correct']:
@@ -892,9 +899,6 @@ Examples:
             args.dataset_name, args.feature_prefix
         )
 
-        # Calculate the sigmas for the dataset  
-        sigmas = cal_sigmas(X_train, X_test, feature_names)
-
         # Determine which training data to use for optimization
         # If test_split is specified, we'll combine and split later in train_and_convert_forest
         # For optimization, we use the original training set
@@ -971,7 +975,7 @@ Examples:
         # Process all test samples classified with target label
         stored_samples, summary = process_all_classified_samples(
             connections, args.dataset_name, args.class_label,
-            our_forest, X_test, y_test, feature_names, eu_data, sigmas, args.sample_percentage
+            our_forest, X_test, y_test, feature_names, eu_data, args.sample_percentage
         )
         
         # Initialize seed candidates 
