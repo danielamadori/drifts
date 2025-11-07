@@ -36,7 +36,7 @@ def write_log(log_file, message):
         f.write(line + '\n')
         f.flush()
 
-def run_test_without_docker(datasets, log_file):
+def run_test_without_docker(datasets, log_file, continue_on_error=False):
     """Esegui test senza Docker"""
     write_log(log_file, "\n" + "="*80)
     write_log(log_file, "TESTING WITHOUT DOCKER")
@@ -49,6 +49,11 @@ def run_test_without_docker(datasets, log_file):
         '--worker-duration', '20',
         '--datasets'
     ] + datasets
+
+    # Aggiungi flag continue-on-error se richiesto
+    if continue_on_error:
+        cmd.insert(3, '--continue-on-error')
+        write_log(log_file, "[INFO] Modalità continue-on-error attiva")
 
     write_log(log_file, f"Command: {' '.join(cmd)}")
     write_log(log_file, f"Testing {len(datasets)} datasets")
@@ -66,7 +71,7 @@ def run_test_without_docker(datasets, log_file):
         write_log(log_file, "[INTERRUPTED] Test interrotto dall'utente")
         raise
 
-def run_test_with_docker(datasets, log_file):
+def run_test_with_docker(datasets, log_file, continue_on_error=False):
     """Esegui test con Docker"""
     write_log(log_file, "\n" + "="*80)
     write_log(log_file, "TESTING WITH DOCKER")
@@ -80,6 +85,11 @@ def run_test_with_docker(datasets, log_file):
         '--worker-duration', '20',
         '--datasets'
     ] + datasets
+
+    # Aggiungi flag continue-on-error se richiesto
+    if continue_on_error:
+        docker_cmd.insert(6, '--continue-on-error')
+        write_log(log_file, "[INFO] Modalità continue-on-error attiva")
 
     write_log(log_file, f"Command: {' '.join(docker_cmd)}")
     write_log(log_file, f"Testing {len(datasets)} datasets in Docker")
@@ -138,6 +148,8 @@ def main():
                        help='Esegui solo test con Docker (equivalente a --skip-local)')
     parser.add_argument('--local-only', action='store_true',
                        help='Esegui solo test locali (equivalente a --skip-docker)')
+    parser.add_argument('--continue-on-error', action='store_true',
+                       help='Continua testando anche se un dataset fallisce')
 
     args = parser.parse_args()
 
@@ -179,7 +191,7 @@ def main():
 
     # Test senza Docker
     if not args.skip_local:
-        success = run_test_without_docker(datasets, log_file)
+        success = run_test_without_docker(datasets, log_file, args.continue_on_error)
         results['local'] = {'status': 'completed', 'success': success}
 
         if not success:
@@ -194,7 +206,7 @@ def main():
 
     # Test con Docker
     if not args.skip_docker:
-        success = run_test_with_docker(datasets, log_file)
+        success = run_test_with_docker(datasets, log_file, args.continue_on_error)
         results['docker'] = {'status': 'completed', 'success': success}
 
         if not success:

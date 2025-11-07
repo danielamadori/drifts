@@ -36,10 +36,11 @@ def run_cmd(args, timeout=None):
         )
         return result
     except subprocess.TimeoutExpired as e:
+        # stdout e stderr sono già stringhe quando text=True
         return type('obj', (object,), {
             'returncode': -1,
-            'stdout': e.stdout.decode() if e.stdout else '',
-            'stderr': e.stderr.decode() if e.stderr else '',
+            'stdout': e.stdout if e.stdout else '',
+            'stderr': e.stderr if e.stderr else '',
             'timeout': True
         })()
 
@@ -67,6 +68,7 @@ def start_workers(profile='default'):
     if profile != 'default':
         args.extend(['--profile', profile])
 
+    process = None  # Inizializza process
     try:
         # Avvia enhanced_launch_workers e lascialo girare in background
         process = subprocess.Popen(
