@@ -19,8 +19,6 @@ Example retrieval:
     log_data = json.loads(log_json)
     print(log_data['car_processing']['candidate_bitmap'])  # Full bitmap string
 """
-
-from cost_function import cost_function
 import redis
 import time
 import datetime
@@ -476,10 +474,6 @@ def main():
                         icf = bitmap_to_icf(ext_bitmap, eu_data)
                         sample_data = json.loads(connections['DATA'].get(icf['sample_key'] + "_meta"))
                         print(">>>>>>>>>>>>>>>>> Sample Data:", sample_data)
-                        cost = cost_function(
-                            sample=sample_data['sample_dict'],
-                            icf=icf, sigmas=sample_data["sigmas"]
-                        )
                         # Store ICF bitmap in R with metadata
                         icf_metadata = {
                             # 'sample_key': icf['sample_key'],
@@ -487,8 +481,7 @@ def main():
                             # 'class_label': sample_data['actual_label'],
                             # 'test_index': sample_data['test_index'],
                             # 'prediction_correct': sample_data['prediction_correct'],
-                            'timestamp': current_time,
-                            'cost': cost
+                            'timestamp': current_time
                         }
                         connections['CAN'].set(ext_bitmap, json.dumps(icf_metadata))
                     random.shuffle(extension_bitmaps)

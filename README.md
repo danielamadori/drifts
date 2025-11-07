@@ -13,6 +13,7 @@ into Redis-backed caches.
 Docker provides an isolated environment with Redis pre-configured.
 
 **Requirements:**
+
 - Docker Desktop installed and running
   - Windows: https://www.docker.com/products/docker-desktop
   - Linux/macOS: https://docs.docker.com/get-docker/
@@ -32,14 +33,14 @@ This will build the Docker image and start a container with Redis on `localhost:
 
 **Available Commands:**
 
-| Command | Windows | Linux/macOS | Description |
-|---------|---------|-------------|-------------|
-| Start | `run.bat` or `run.bat start` | `./run.sh` or `./run.sh start` | Build and start container |
-| Stop | `run.bat stop` | `./run.sh stop` | Stop container |
-| Shell | `run.bat shell` | `./run.sh shell` | Open bash shell in container |
-| Logs | `run.bat logs` | `./run.sh logs` | View container logs |
-| Restart | `run.bat restart` | `./run.sh restart` | Restart container |
-| Help | `run.bat help` | `./run.sh help` | Show help |
+| Command | Windows                          | Linux/macOS                        | Description                  |
+| ------- | -------------------------------- | ---------------------------------- | ---------------------------- |
+| Start   | `run.bat` or `run.bat start` | `./run.sh` or `./run.sh start` | Build and start container    |
+| Stop    | `run.bat stop`                 | `./run.sh stop`                  | Stop container               |
+| Shell   | `run.bat shell`                | `./run.sh shell`                 | Open bash shell in container |
+| Logs    | `run.bat logs`                 | `./run.sh logs`                  | View container logs          |
+| Restart | `run.bat restart`              | `./run.sh restart`               | Restart container            |
+| Help    | `run.bat help`                 | `./run.sh help`                  | Show help                    |
 
 **Using the container:**
 
@@ -54,6 +55,7 @@ python enhanced_launch_workers.py start --profile development
 ```
 
 The following directories are automatically mounted and accessible from your host:
+
 - `./logs` - Application logs
 - `./workers` - Workers configuration
 - `./results` - Experiment results
@@ -96,7 +98,6 @@ python init_aeon_univariate.py --list-datasets
 python init_aeon_univariate.py ECG200 --class-label "1" --optimize
 
 ```
-
 
 #### Core arguments
 
@@ -141,6 +142,7 @@ python3 enhanced_launch_workers.py start --profile production
 Edit the file `worker_config.yaml` to customize worker settings, e.g., increase the number of workers.
 
 **Key parameters:**
+
 - `start` — Start workers using configuration
 - `--profile {default|development|production}` — Use predefined worker profiles
   - `default`: 1 worker with `worker_cache.py`
@@ -149,6 +151,7 @@ Edit the file `worker_config.yaml` to customize worker settings, e.g., increase 
 - `--config FILE` — Use custom YAML configuration file
 
 **Other useful commands:**
+
 ```bash
 # Check worker status
 python3 enhanced_launch_workers.py status
@@ -164,6 +167,7 @@ python3 enhanced_launch_workers.py clean-restart
 ```
 
 **Expected output:**
+
 ```
 Starting 1 worker processes...
 Worker 1 started (PID: 12345)
@@ -171,6 +175,7 @@ Workers running. Press Ctrl+C to monitor or stop.
 ```
 
 **Monitor progress:**
+
 ```bash
 # Check Redis databases for candidate reasons and confirmed reasons
 redis-cli -n 1 DBSIZE  # CAN database (candidates)

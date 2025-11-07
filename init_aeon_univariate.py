@@ -12,7 +12,6 @@ Usage:
 """
 
 import argparse
-from cost_function import cal_sigmas, cost_function
 import redis
 import json
 import time
@@ -372,7 +371,7 @@ def optimize_rf_hyperparameters(X_train, y_train, search_space, n_iter=50, cv=5,
             # Return negative score (gp_minimize minimizes)
             return -score
 
-        print("\n⏳ Running Bayesian optimization with test set validation...")
+        print("\nRunning Bayesian optimization with test set validation...")
         result = gp_minimize(
             objective,
             dimensions,
@@ -566,8 +565,17 @@ def store_forest_and_endpoints(connections, our_forest):
     return feature_thresholds
 
 
-def process_all_classified_samples(connections, dataset_name, class_label, our_forest, 
-                                 X_test, y_test, feature_names, eu_data, sigmas, sample_percentage=None):
+def process_all_classified_samples(
+    connections,
+    dataset_name,
+    class_label,
+    our_forest,
+    X_test,
+    y_test,
+    feature_names,
+    eu_data,
+    sample_percentage=None,
+):
     """
     Process all test samples that are classified with the specified class label
     Store samples in DATA and their ICF representations in R
@@ -630,8 +638,7 @@ def process_all_classified_samples(connections, dataset_name, class_label, our_f
             'test_index': sample_data['test_index'],
             'dataset_name': dataset_name,
             'timestamp': current_time,
-            'prediction_correct': sample_data['prediction_correct'],
-            'sigmas' : sigmas[sample_data["test_index"]]  # Add sigmas to sample metadata
+            'prediction_correct': sample_data['prediction_correct']
         }
         
         # Store sample using our helper function
@@ -643,10 +650,7 @@ def process_all_classified_samples(connections, dataset_name, class_label, our_f
         try:
             sample_icf = our_forest.extract_icf(sample_data['sample_dict'])
             icf_bitmap = bitmap_mask_to_string(icf_to_bitmap_mask(sample_icf, eu_data))
-            cost = cost_function(
-                sample=sample_data['sample_dict'],
-                icf=sample_icf, sigmas=sigmas[sample_data["test_index"]], verbose=True
-            )
+            
             # Store ICF bitmap in R with metadata
             icf_metadata = {
                 'sample_key': sample_key,
@@ -654,8 +658,7 @@ def process_all_classified_samples(connections, dataset_name, class_label, our_f
                 'class_label': class_label,
                 'test_index': sample_data['test_index'],
                 'prediction_correct': sample_data['prediction_correct'],
-                'timestamp': current_time,
-                'cost': cost
+                'timestamp': current_time
             }
             
             connections['R'].set(icf_bitmap, json.dumps(icf_metadata))
@@ -665,7 +668,6 @@ def process_all_classified_samples(connections, dataset_name, class_label, our_f
                 'icf_bitmap': icf_bitmap,
                 'prediction_correct': sample_data['prediction_correct'],
                 'test_index': sample_data['test_index']#,
-                #'sigmas' : sigmas[sample_data["test_index"]]  # Add sigmas to sample metadata
             })
             
             if sample_data['prediction_correct']:
@@ -717,10 +719,6 @@ def initialize_seed_candidate(connections, sample_dict, our_forest, eu_data):
 
     # Store in CAN with timestamp
     current_timestamp = time.time()
-    cost = cost_function(
-        sample=sample_dict['sample_dict'],
-        icf=forest_icf, sigmas=sample_dict["sigmas"]
-    )
     # Store ICF bitmap in R with metadata
     icf_metadata = {
         # 'sample_key': sample_key,
@@ -729,7 +727,7 @@ def initialize_seed_candidate(connections, sample_dict, our_forest, eu_data):
         'test_index': sample_dict['test_index'],
         'prediction_correct': sample_dict['prediction_correct'],        
         'timestamp': current_timestamp,
-        'cost': cost
+        'cost': None
     }
     connections['CAN'].set(bitmap_string, json.dumps(icf_metadata))
     print(f"[OK] Stored initial candidate in CAN")
@@ -901,9 +899,6 @@ Examples:
             args.dataset_name, args.feature_prefix
         )
 
-        # Calculate the sigmas for the dataset  
-        sigmas = cal_sigmas(X_train, X_test, feature_names)
-
         # Determine which training data to use for optimization
         # If test_split is specified, we'll combine and split later in train_and_convert_forest
         # For optimization, we use the original training set
@@ -980,7 +975,7 @@ Examples:
         # Process all test samples classified with target label
         stored_samples, summary = process_all_classified_samples(
             connections, args.dataset_name, args.class_label,
-            our_forest, X_test, y_test, feature_names, eu_data, sigmas, args.sample_percentage
+            our_forest, X_test, y_test, feature_names, eu_data, args.sample_percentage
         )
         
         # Initialize seed candidates 
