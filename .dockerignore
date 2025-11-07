@@ -37,13 +37,6 @@ desktop.ini
 logs/*.log
 *.tmp
 
-# Test results
-test_all_optimize_results.txt
-test_all_optimize_results.json
-dataset_test_results.txt
-dataset_test_results.json
-
-
 .dockerignore
 
 # Workers runtime data
