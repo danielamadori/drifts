@@ -371,7 +371,7 @@ def optimize_rf_hyperparameters(X_train, y_train, search_space, n_iter=50, cv=5,
             # Return negative score (gp_minimize minimizes)
             return -score
 
-        print("\n⏳ Running Bayesian optimization with test set validation...")
+        print("\nRunning Bayesian optimization with test set validation...")
         result = gp_minimize(
             objective,
             dimensions,
